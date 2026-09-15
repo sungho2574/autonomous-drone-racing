@@ -197,7 +197,8 @@ cd ~/PX4-Autopilot && make px4_sitl        # 최초 빌드
 git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git ~/Micro-XRCE-DDS-Agent
 cd ~/Micro-XRCE-DDS-Agent && mkdir build && cd build && cmake .. && make -j$(nproc) && sudo make install && sudo ldconfig /usr/local/lib/
 
-# 4) 이 레포
+# 4) 이 레포 (메시는 git LFS)
+sudo apt install git-lfs && git lfs install
 git clone --recursive https://github.com/sungho2574/autonomous-drone-racing.git
 cd autonomous-drone-racing/adr_ws
 rosdep install --from-paths src --ignore-src -r -y     # motion_capture_tracking 의존성 포함

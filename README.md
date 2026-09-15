@@ -34,7 +34,10 @@ autonomous-drone-racing/
 
 ## 설치
 
+메시(`*.stl`)는 git LFS 로 관리하므로 클론 전에 `git lfs install` 이 한 번 필요하다.
+
 ```bash
+sudo apt install git-lfs && git lfs install
 git clone --recursive https://github.com/sungho2574/autonomous-drone-racing.git
 cd autonomous-drone-racing/adr_ws
 rosdep install --from-paths src --ignore-src -r -y
