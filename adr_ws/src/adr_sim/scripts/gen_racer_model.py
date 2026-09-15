@@ -243,8 +243,16 @@ param set-default MC_PITCHRATE_MAX 800
 param set-default MC_ROLLRATE_MAX 800
 param set-default MC_YAWRATE_MAX 400
 
-# 데이터링크 loss 시 hold (x500 과 동일)
-param set-default NAV_DLL_ACT 2
+# ---- GCS / RC 없이 offboard 로만 띄우기 위한 설정 ----
+# NAV_DLL_ACT: GCS 연결 끊김 failsafe. 0 이 아니면 rcAndDataLinkCheck 가
+#   gcs_connection_required 를 세워 "Preflight Fail: No connection to the GCS" 로 arm 을 막는다.
+#   (x500 은 2 = Return mode 를 쓰지만, QGC 를 띄우지 않는 이 구성에서는 0 이어야 한다.)
+param set-default NAV_DLL_ACT 0
+# SITL 에는 전원 모듈이 없어 "Preflight Fail: system power unavailable" 이 뜬다. 894281 = 매직 해제값.
+param set-default CBRK_SUPPLY_CHK 894281
+# 조종기 없이 offboard 유지: manual control loss 시 offboard 를 예외 처리(bit2).
+# 1.18 의 NAV_RCL_ACT 에는 0(Disabled) 값이 없으므로 이쪽으로 처리해야 한다.
+param set-default COM_RCL_EXCEPT 4
 
 param set-default EKF2_BCOEF_X 0.0
 param set-default EKF2_BCOEF_Y 0.0
