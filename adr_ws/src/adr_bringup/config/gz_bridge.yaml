@@ -1,0 +1,23 @@
+# ros_gz_bridge parameter_bridge 설정 (sim.launch.py)
+# gz 토픽 이름은 adr_sim/models/adr_racer/model.sdf 의 <topic> 과 일치해야 한다.
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+- ros_topic_name: /adr/camera/image_raw
+  gz_topic_name: /adr_racer/camera
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+- ros_topic_name: /adr/camera/camera_info
+  gz_topic_name: /adr_racer/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+# 진실값 (평가/디버그용). PX4 로의 주입은 gz_bridge 가 odometry_with_covariance 로 직접 한다.
+- ros_topic_name: /adr/ground_truth/odom
+  gz_topic_name: /model/adr_racer/odometry
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS

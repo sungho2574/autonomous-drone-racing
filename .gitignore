@@ -1,0 +1,14 @@
+# colcon
+adr_ws/build/
+adr_ws/install/
+adr_ws/log/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# misc
+.DS_Store
+*.swp

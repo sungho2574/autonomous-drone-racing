@@ -1,0 +1,45 @@
+# 250급 레이싱 드론 스펙 — gen_racer_model.py 가 읽어
+#   models/adr_racer/model.sdf 와 px4/airframes/4030_gz_adr_racer 를 생성한다.
+# 값을 바꾸면 스크립트를 다시 돌려 두 파일을 함께 갱신할 것.
+#
+# 참고 스펙(통상적인 5인치 프리스타일/레이싱 쿼드, 4S~6S):
+#   프레임 250 mm(모터 대각), 2306급 모터, 5" 프롭, AUW ~750 g(배터리 포함), 모터당 최대 추력 ~1.2~1.3 kgf
+name: adr_racer
+mass: 0.75                    # [kg] 배터리 포함
+inertia: {ixx: 2.5e-3, iyy: 2.5e-3, izz: 4.5e-3}   # [kg m^2] 강체 근사(0.75 kg, 25 cm 대각)
+arm_length: 0.125             # [m] 중심 → 모터축 (250 mm 대각 / 2)
+rotor_z: 0.02                 # [m] 모터축 높이(base_link 기준)
+spawn_z: 0.05                 # [m] 모델 원점 초기 높이(바닥 위)
+prop:
+  diameter_in: 5.0            # [inch]
+  x500_mesh_in: 13.45         # x500_base 프롭 메시 원본 크기 → scale = 5/13.45
+  mass: 0.004                 # [kg] 프롭+벨 회전 질량 근사
+motor:
+  max_rot_velocity: 3000.0    # [rad/s] ≈ 28,600 rpm (2306 2400KV @ 4S 부하 시)
+  motor_constant: 1.4e-6      # [N s^2] 추력 = kf·ω² → 3000 rad/s 에서 12.6 N (TWR ≈ 6.8)
+  moment_constant: 0.016      # [m] 반토크/추력 비
+  time_constant_up: 0.0125    # [s]
+  time_constant_down: 0.025   # [s]
+  rotor_drag_coefficient: 2.0e-5
+  rolling_moment_coefficient: 1.0e-6
+  rotor_velocity_slowdown_sim: 30   # 시각적 회전 감속 배율 (물리에 영향 없음)
+camera:
+  width: 640
+  height: 480
+  hfov: 1.5708                # [rad] 90°
+  rate: 30                    # [Hz]
+  tilt_deg: 30                # 상향 틸트 (레이싱 카메라 각도)
+  pose_xyz: [0.08, 0.0, 0.02] # base_link 기준 [m]
+  topic: adr_racer/camera     # gz 토픽 (ros_gz_bridge 가 /adr/camera/image_raw 로 브릿지)
+px4:
+  sys_autostart: 4030
+  ec_min: 300                 # SIM_GZ_EC_MINn [rad/s] 아이들
+  thr_hover: 0.31             # MPC_THR_HOVER: ω_hover=sqrt(mg/4/kf)=1146 rad/s → (1146-300)/(3000-300) ≈ 0.31 (HTE 가 비행 중 보정)
+  xy_vel_max: 10.0
+  z_vel_max_up: 5.0
+  z_vel_max_dn: 3.0
+  acc_hor: 8.0
+  acc_up_max: 8.0
+  acc_down_max: 6.0
+  jerk_auto: 20.0
+  yawrate_max: 200.0          # MPC_YAWRAUTO_MAX [deg/s]

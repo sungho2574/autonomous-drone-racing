@@ -1,0 +1,30 @@
+import os
+from glob import glob
+
+from setuptools import find_packages, setup
+
+package_name = 'adr_bringup'
+
+setup(
+    name=package_name,
+    version='0.1.0',
+    packages=find_packages(exclude=['test']),
+    data_files=[
+        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
+        ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*')),
+        (os.path.join('share', package_name, 'config'), glob('config/*')),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    description='통합 launch, 게이트 맵(gates.yaml), rviz 마커, PX4 odom→TF, mocap 브릿지',
+    license='MIT',
+    tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            'gate_markers = adr_bringup.gate_markers:main',
+            'px4_odom_to_tf = adr_bringup.px4_odom_to_tf:main',
+            'mocap_bridge = adr_bringup.mocap_bridge:main',
+        ],
+    },
+)

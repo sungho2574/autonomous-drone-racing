@@ -1,0 +1,12 @@
+gate_planner:
+  ros__parameters:
+    gates_file: ""        # 비우면 adr_bringup/config/gates.yaml
+    laps: 2               # 코스 반복 횟수
+    approach_dist: 0.8    # 게이트 앞뒤 오프셋 점 거리 [m] (0 이면 중심만)
+    v_avg: 3.0            # 시간 할당용 평균 속도 [m/s]
+    v_max: 6.0            # 초과 시 전체 시간 스케일
+    a_max: 8.0
+    t_min: 0.3            # 세그먼트 최소 시간 [s]
+    end_at_start: true    # 마지막에 이륙 호버점으로 복귀
+    path_dt: 0.05         # rviz Path 샘플 간격 [s]
+    frame_id: map

@@ -1,0 +1,14 @@
+px4_position_controller:
+  ros__parameters:
+    rate_hz: 50.0
+    warmup_count: 20
+    auto_arm: true
+    fmu_ns: ""
+    trajectory_topic: /adr/trajectory
+    pos_tol: 0.25
+    vel_tol: 0.3
+    takeoff_timeout: 20.0
+    feedforward: true       # pos+vel+acc 피드포워드. 문제 시 false 로 position-only
+    land_after: true
+    hold_time: 3.0
+    time_scale: 1.0         # 궤적 재생 배속 (첫 비행은 0.5 권장)

@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 자동 생성: scripts/gen_racer_model.py (스펙: config/racer_spec.yaml). 직접 수정하지 말 것.
+     250급 레이싱 쿼드. 질량 0.75 kg, 모터 대각 250 mm, 5" 프롭.
+     PX4 gz_bridge 규약: 링크 base_link, 센서 imu_sensor/magnetometer_sensor/air_pressure_sensor/navsat_sensor,
+     모터 명령 토픽 /<model>/command/motor_speed. 외관 STL 교체 지점은 meshes/README.md 참고. -->
+<sdf version="1.9">
+  <model name="adr_racer">
+    <pose>0 0 0.05 0 0 0</pose>
+    <self_collide>false</self_collide>
+    <static>false</static>
+    <link name="base_link">
+      <inertial>
+        <mass>0.75</mass>
+        <inertia>
+          <ixx>0.0025</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.0025</iyy><iyz>0</iyz>
+          <izz>0.0045</izz>
+        </inertia>
+      </inertial>
+      <gravity>true</gravity>
+      <velocity_decay/>
+      <!-- ===== 외관 (placeholder). 실제 프레임 STL 이 준비되면 아래 body_visual 을
+           <mesh><uri>model://adr_racer/meshes/frame.stl</uri></mesh> 로 교체 ===== -->
+      <visual name="body_visual">
+        <pose>0 0 0.012 0 0 0</pose>
+        <geometry><box><size>0.11 0.04 0.024</size></box></geometry>
+        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
+      </visual>
+      <visual name="battery_visual">
+        <pose>0 0 0.036 0 0 0</pose>
+        <geometry><box><size>0.075 0.035 0.024</size></box></geometry>
+        <material><ambient>0.05 0.05 0.3 1</ambient><diffuse>0.05 0.05 0.3 1</diffuse></material>
+      </visual>
+      <visual name="arm_0_visual">
+        <pose>0.0441942 -0.0441942 0 0 0 -0.785398</pose>
+        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+      <visual name="motor_0_visual">
+        <pose>0.0883883 -0.0883883 0.01 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
+      </visual>
+      <visual name="arm_1_visual">
+        <pose>-0.0441942 0.0441942 0 0 0 -0.785398</pose>
+        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+      <visual name="motor_1_visual">
+        <pose>-0.0883883 0.0883883 0.01 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
+      </visual>
+      <visual name="arm_2_visual">
+        <pose>0.0441942 0.0441942 0 0 0 0.785398</pose>
+        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+      <visual name="motor_2_visual">
+        <pose>0.0883883 0.0883883 0.01 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
+      </visual>
+      <visual name="arm_3_visual">
+        <pose>-0.0441942 -0.0441942 0 0 0 0.785398</pose>
+        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
+        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      </visual>
+      <visual name="motor_3_visual">
+        <pose>-0.0883883 -0.0883883 0.01 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
+      </visual>
+      <collision name="base_link_collision">
+        <pose>0 0 0.015 0 0 0</pose>
+        <geometry><box><size>0.20 0.20 0.05</size></box></geometry>
+        <surface>
+          <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
+          <friction><ode/></friction>
+        </surface>
+      </collision>
+      <!-- ===== PX4 gz_bridge 가 요구하는 센서 4종 (x500_base 에서 복사, 이름 변경 금지) ===== -->
+      <sensor name="air_pressure_sensor" type="air_pressure">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+        <air_pressure>
+          <!-- Noise modeled after BMP390 -->
+          <pressure>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>3</stddev>
+            </noise>
+          </pressure>
+        </air_pressure>
+      </sensor>
+      <sensor name="magnetometer_sensor" type="magnetometer">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>100</update_rate>
+        <magnetometer>
+          <!-- TODO: update to fix units and coordinate system when we move past Harmonic -->
+          <!-- See https://github.com/gazebosim/gz-sim/pull/2460 -->
+          <!-- 3mgauss RMS: NOTE: noise is in tesla but sensor reports data in gauss -->
+          <!-- Noise modeled after IIS2MDC -->
+          <x>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </z>
+        </magnetometer>
+      </sensor>
+      <sensor name="imu_sensor" type="imu">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+        <imu>
+          <angular_velocity>
+            <!-- Noise modeled after IIM42653 -->
+            <!-- 0.05 deg/s converted to rad/s -->
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.0008726646</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.0008726646</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.0008726646</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <!-- Noise modeled after IIM42653 -->
+            <!-- X & Y axis: 0.65 mg-rms converted to m/ss -->
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.00637</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.00637</stddev>
+              </noise>
+            </y>
+            <!-- Z axis: 0.70 mg-rms converted to m/ss-->
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.00686</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+      <sensor name="navsat_sensor" type="navsat">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+      </sensor>
+    </link>
+    <!-- ===== 전방 카메라 (HFOV 1.57 rad, 640x480 @ 30 Hz, 상향 30°) ===== -->
+    <link name="camera_link">
+      <pose>0.08 0 0.02 0 -0.523599 0</pose>
+      <inertial>
+        <mass>0.01</mass>
+        <inertia><ixx>1e-6</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia>
+      </inertial>
+      <visual name="camera_visual">
+        <geometry><box><size>0.015 0.02 0.02</size></box></geometry>
+        <material><ambient>0.2 0.2 0.2 1</ambient><diffuse>0.2 0.2 0.2 1</diffuse></material>
+      </visual>
+      <sensor name="camera" type="camera">
+        <gz_frame_id>camera_link</gz_frame_id>
+        <topic>adr_racer/camera</topic>
+        <camera>
+          <horizontal_fov>1.5708</horizontal_fov>
+          <image><width>640</width><height>480</height></image>
+          <clip><near>0.05</near><far>100</far></clip>
+        </camera>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+      </sensor>
+    </link>
+    <joint name="camera_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>camera_link</child>
+    </joint>
+    <link name="rotor_0">
+      <gravity>true</gravity>
+      <self_collide>false</self_collide>
+      <velocity_decay/>
+      <pose>0.0883883 -0.0883883 0.02 0 0 0</pose>
+      <inertial>
+        <mass>0.004</mass>
+        <inertia>
+          <ixx>1.0e-07</ixx>
+          <iyy>5.37633e-06</iyy>
+          <izz>5.37633e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_0_visual">
+        <!-- PX4 x500_base 의 13.45" 프롭 메시(meshes/, BSD-3) 를 5" 로 축소 -->
+        <pose>-0.00966543 -0.0643123 -0.0070294 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>0.371747 0.371747 0.371747</scale>
+            <uri>model://adr_racer/meshes/1345_prop_ccw.stl</uri>
+          </mesh>
+        </geometry>
+        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+      </visual>
+      <collision name="rotor_0_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.127 0.0063 0.00085</size></box></geometry>
+        <surface>
+          <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
+          <friction><ode/></friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="rotor_1">
+      <gravity>true</gravity>
+      <self_collide>false</self_collide>
+      <velocity_decay/>
+      <pose>-0.0883883 0.0883883 0.02 0 0 0</pose>
+      <inertial>
+        <mass>0.004</mass>
+        <inertia>
+          <ixx>1.0e-07</ixx>
+          <iyy>5.37633e-06</iyy>
+          <izz>5.37633e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_1_visual">
+        <!-- PX4 x500_base 의 13.45" 프롭 메시(meshes/, BSD-3) 를 5" 로 축소 -->
+        <pose>-0.00966543 -0.0643123 -0.0070294 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>0.371747 0.371747 0.371747</scale>
+            <uri>model://adr_racer/meshes/1345_prop_ccw.stl</uri>
+          </mesh>
+        </geometry>
+        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+      </visual>
+      <collision name="rotor_1_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.127 0.0063 0.00085</size></box></geometry>
+        <surface>
+          <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
+          <friction><ode/></friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="rotor_2">
+      <gravity>true</gravity>
+      <self_collide>false</self_collide>
+      <velocity_decay/>
+      <pose>0.0883883 0.0883883 0.02 0 0 0</pose>
+      <inertial>
+        <mass>0.004</mass>
+        <inertia>
+          <ixx>1.0e-07</ixx>
+          <iyy>5.37633e-06</iyy>
+          <izz>5.37633e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_2_visual">
+        <!-- PX4 x500_base 의 13.45" 프롭 메시(meshes/, BSD-3) 를 5" 로 축소 -->
+        <pose>-0.00966543 -0.0643123 -0.0070294 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>0.371747 0.371747 0.371747</scale>
+            <uri>model://adr_racer/meshes/1345_prop_cw.stl</uri>
+          </mesh>
+        </geometry>
+        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+      </visual>
+      <collision name="rotor_2_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.127 0.0063 0.00085</size></box></geometry>
+        <surface>
+          <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
+          <friction><ode/></friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="rotor_3">
+      <gravity>true</gravity>
+      <self_collide>false</self_collide>
+      <velocity_decay/>
+      <pose>-0.0883883 -0.0883883 0.02 0 0 0</pose>
+      <inertial>
+        <mass>0.004</mass>
+        <inertia>
+          <ixx>1.0e-07</ixx>
+          <iyy>5.37633e-06</iyy>
+          <izz>5.37633e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="rotor_3_visual">
+        <!-- PX4 x500_base 의 13.45" 프롭 메시(meshes/, BSD-3) 를 5" 로 축소 -->
+        <pose>-0.00966543 -0.0643123 -0.0070294 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>0.371747 0.371747 0.371747</scale>
+            <uri>model://adr_racer/meshes/1345_prop_cw.stl</uri>
+          </mesh>
+        </geometry>
+        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+      </visual>
+      <collision name="rotor_3_collision">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry><box><size>0.127 0.0063 0.00085</size></box></geometry>
+        <surface>
+          <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
+          <friction><ode/></friction>
+        </surface>
+      </collision>
+    </link>
+    <joint name="rotor_0_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_0</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+        <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+      </axis>
+    </joint>
+    <joint name="rotor_1_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_1</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+        <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+      </axis>
+    </joint>
+    <joint name="rotor_2_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_2</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+        <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+      </axis>
+    </joint>
+    <joint name="rotor_3_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_3</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+        <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+      </axis>
+    </joint>
+    <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>rotor_0_joint</jointName>
+      <linkName>rotor_0</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000</maxRotVelocity>
+      <motorConstant>1.4e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>0</actuator_number>
+      <rotorDragCoefficient>2e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>30</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>rotor_1_joint</jointName>
+      <linkName>rotor_1</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000</maxRotVelocity>
+      <motorConstant>1.4e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>1</actuator_number>
+      <rotorDragCoefficient>2e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>30</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>rotor_2_joint</jointName>
+      <linkName>rotor_2</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000</maxRotVelocity>
+      <motorConstant>1.4e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>2</actuator_number>
+      <rotorDragCoefficient>2e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>30</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin filename="gz-sim-multicopter-motor-model-system" name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>rotor_3_joint</jointName>
+      <linkName>rotor_3</linkName>
+      <turningDirection>cw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3000</maxRotVelocity>
+      <motorConstant>1.4e-06</motorConstant>
+      <momentConstant>0.016</momentConstant>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>3</actuator_number>
+      <rotorDragCoefficient>2e-05</rotorDragCoefficient>
+      <rollingMomentCoefficient>1e-06</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>30</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <!-- 진실값 odometry → PX4 gz_bridge 가 vehicle_visual_odometry 로 주입 (mocap 에뮬레이션).
+         airframe 4031(EKF2_EV_CTRL=15) 에서만 EKF2 가 사용하고, 4030(GPS) 에서는 무시된다. -->
+    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+      <dimensions>3</dimensions>
+      <odom_publish_frequency>100</odom_publish_frequency>
+    </plugin>
+  </model>
+</sdf>

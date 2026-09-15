@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# @name Gazebo adr_racer, external vision (mocap emulation / real mocap)
+# @type Quadrotor
+#
+# 4030 과 동일 기체. GPS/기압 대신 외부 위치(vehicle_visual_odometry)로 EKF2 를 구동한다.
+#   - sim : model.sdf 의 OdometryPublisher 진실값을 gz_bridge 가 주입
+#   - 실기체: adr_bringup mocap_bridge 가 /fmu/in/vehicle_visual_odometry 로 발행
+
+. ${R}etc/init.d-posix/airframes/4030_gz_adr_racer
+
+param set-default EKF2_EV_CTRL 15      # bit0 수평위치, bit1 수직위치, bit2 3D속도, bit3 yaw
+param set-default EKF2_HGT_REF 3       # 높이 기준 = vision
+param set-default EKF2_GPS_CTRL 0
+param set-default EKF2_BARO_CTRL 0
+param set-default EKF2_EV_DELAY 0
+param set-default EKF2_EV_NOISE_MD 1   # 파라미터 노이즈 사용 (메시지 분산 무시)
+param set-default EKF2_EVP_NOISE 0.02
+param set-default EKF2_EVA_NOISE 0.02
+param set-default EKF2_EVV_NOISE 0.1
