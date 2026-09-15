@@ -28,6 +28,17 @@ PX4_PUB_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
                          history=HistoryPolicy.KEEP_LAST, depth=10)
 
 
+def px4_topic(base: str, msg_type) -> str:
+    """버전 관리되는 메시지는 uXRCE-DDS 토픽에 '_v<MESSAGE_VERSION>' 이 붙는다.
+
+    PX4 1.18 기준 vehicle_status → vehicle_status_v4, vehicle_local_position → vehicle_local_position_v1.
+    MESSAGE_VERSION 이 0 이거나 없는 메시지는 접미사 없이 그대로다. px4_msgs 를 올릴 때
+    토픽 이름을 손으로 고치지 않도록 상수에서 유도한다.
+    """
+    v = getattr(msg_type, 'MESSAGE_VERSION', 0)
+    return f'{base}_v{v}' if v else base
+
+
 class OffboardBase(Node):
     def __init__(self, name: str):
         super().__init__(name)
@@ -44,9 +55,11 @@ class OffboardBase(Node):
         self._mode_pub = self.create_publisher(OffboardControlMode, f'{ns}/fmu/in/offboard_control_mode', PX4_PUB_QOS)
         self._sp_pub = self.create_publisher(TrajectorySetpoint, f'{ns}/fmu/in/trajectory_setpoint', PX4_PUB_QOS)
         self._cmd_pub = self.create_publisher(VehicleCommand, f'{ns}/fmu/in/vehicle_command', PX4_PUB_QOS)
-        self.create_subscription(VehicleLocalPosition, f'{ns}/fmu/out/vehicle_local_position',
+        self.create_subscription(VehicleLocalPosition,
+                                 px4_topic(f'{ns}/fmu/out/vehicle_local_position', VehicleLocalPosition),
                                  self._on_local_position, PX4_SUB_QOS)
-        self.create_subscription(VehicleStatus, f'{ns}/fmu/out/vehicle_status',
+        self.create_subscription(VehicleStatus,
+                                 px4_topic(f'{ns}/fmu/out/vehicle_status', VehicleStatus),
                                  self._on_status, PX4_SUB_QOS)
 
         self._lpos: VehicleLocalPosition | None = None

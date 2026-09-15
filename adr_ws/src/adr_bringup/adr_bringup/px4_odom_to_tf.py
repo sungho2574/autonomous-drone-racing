@@ -10,7 +10,7 @@ from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 
 from adr_control import frames as F
-from adr_control.offboard_base import PX4_SUB_QOS
+from adr_control.offboard_base import PX4_SUB_QOS, px4_topic
 
 
 class PX4OdomToTF(Node):
@@ -24,7 +24,8 @@ class PX4OdomToTF(Node):
         self.child = self.get_parameter('child_frame_id').value
         self.br = TransformBroadcaster(self)
         self.odom_pub = self.create_publisher(Odometry, '/adr/odom', 10)
-        self.create_subscription(VehicleOdometry, f'{ns}/fmu/out/vehicle_odometry', self._cb, PX4_SUB_QOS)
+        self.create_subscription(VehicleOdometry, px4_topic(f'{ns}/fmu/out/vehicle_odometry', VehicleOdometry),
+                                 self._cb, PX4_SUB_QOS)
 
     def _cb(self, m: VehicleOdometry):
         if m.pose_frame != VehicleOdometry.POSE_FRAME_NED or m.q[0] != m.q[0]:

@@ -19,7 +19,7 @@ from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import Buffer, TransformListener
 
 from adr_control import frames as F
-from adr_control.offboard_base import PX4_PUB_QOS
+from adr_control.offboard_base import PX4_PUB_QOS, px4_topic
 
 SENSOR_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
 
@@ -41,7 +41,9 @@ class MocapBridge(Node):
         self.mocap_frame = self.get_parameter('mocap_frame').value
         self.pvar = float(self.get_parameter('position_variance').value)
         self.ovar = float(self.get_parameter('orientation_variance').value)
-        self.pub = self.create_publisher(VehicleOdometry, f'{ns}/fmu/in/vehicle_visual_odometry', PX4_PUB_QOS)
+        self.pub = self.create_publisher(VehicleOdometry,
+                                         px4_topic(f'{ns}/fmu/in/vehicle_visual_odometry', VehicleOdometry),
+                                         PX4_PUB_QOS)
         self.n_sent = 0
 
         if self.get_parameter('source').value == 'tf':
