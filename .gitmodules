@@ -1,7 +1,7 @@
 [submodule "adr_ws/src/px4_msgs"]
 	path = adr_ws/src/px4_msgs
 	url = https://github.com/PX4/px4_msgs.git
-	branch = release/1.16
+	branch = main
 [submodule "adr_ws/src/motion_capture_tracking"]
 	path = adr_ws/src/motion_capture_tracking
 	url = https://github.com/IMRCLab/motion_capture_tracking.git
