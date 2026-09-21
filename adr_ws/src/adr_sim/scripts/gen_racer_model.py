@@ -33,14 +33,16 @@ def gen_sdf(s):
         (0, L, -L, 'ccw'), (1, -L, L, 'ccw'), (2, L, L, 'cw'), (3, -L, -L, 'cw'),
     ]
 
+    fm = s.get('frame_mesh')
     links, joints, plugins, arms = [], [], [], []
     for i, x, y, d in rotors:
-        arms.append(f'''      <visual name="arm_{i}_visual">
+        if not fm:   # 메시가 있으면 팔은 메시에 포함, 모터 실린더만 추가
+            arms.append(f'''      <visual name="arm_{i}_visual">
         <pose>{fmt(x/2)} {fmt(y/2)} 0 0 0 {fmt(radians(45 if x*y > 0 else -45))}</pose>
         <geometry><box><size>{fmt(s['arm_length'])} 0.012 0.006</size></box></geometry>
         <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-      </visual>
-      <visual name="motor_{i}_visual">
+      </visual>''')
+        arms.append(f'''      <visual name="motor_{i}_visual">
         <pose>{fmt(x)} {fmt(y)} {fmt(rz/2)} 0 0 0</pose>
         <geometry><cylinder><radius>0.014</radius><length>{fmt(rz)}</length></cylinder></geometry>
         <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
@@ -106,11 +108,38 @@ def gen_sdf(s):
 
     cx, cy, cz = cam['pose_xyz']
     sensors = open(os.path.join(HERE, 'px4_sensors.sdf.inc')).read()
+    if fm:
+        r, p_, y_ = fm.get('rpy', [0, 0, 0])
+        csz = fm.get('collision_size', [0.2, 0.2, 0.05])
+        body = f'''      <!-- ===== 외관: meshes/{fm['file']} (scale {fm['scale']}, rpy {r} {p_} {y_}) ===== -->
+      <visual name="frame_visual">
+        <pose>0 0 0 {fmt(r)} {fmt(p_)} {fmt(y_)}</pose>
+        <geometry>
+          <mesh>
+            <scale>{fmt(fm['scale'])} {fmt(fm['scale'])} {fmt(fm['scale'])}</scale>
+            <uri>model://{s['name']}/meshes/{fm['file']}</uri>
+          </mesh>
+        </geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.12 0.12 0.12 1</diffuse><specular>0.3 0.3 0.3 1</specular></material>
+      </visual>'''
+    else:
+        csz = [0.2, 0.2, 0.05]
+        body = '''      <!-- ===== 외관 (placeholder). racer_spec.yaml 에 frame_mesh 를 주면 메시로 교체된다 ===== -->
+      <visual name="body_visual">
+        <pose>0 0 0.012 0 0 0</pose>
+        <geometry><box><size>0.11 0.04 0.024</size></box></geometry>
+        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
+      </visual>
+      <visual name="battery_visual">
+        <pose>0 0 0.036 0 0 0</pose>
+        <geometry><box><size>0.075 0.035 0.024</size></box></geometry>
+        <material><ambient>0.05 0.05 0.3 1</ambient><diffuse>0.05 0.05 0.3 1</diffuse></material>
+      </visual>'''
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!-- 자동 생성: scripts/gen_racer_model.py (스펙: config/racer_spec.yaml). 직접 수정하지 말 것.
      250급 레이싱 쿼드. 질량 {s['mass']} kg, 모터 대각 {2*s['arm_length']*1000:.0f} mm, 5" 프롭.
      PX4 gz_bridge 규약: 링크 base_link, 센서 imu_sensor/magnetometer_sensor/air_pressure_sensor/navsat_sensor,
-     모터 명령 토픽 /<model>/command/motor_speed. 외관 STL 교체 지점은 meshes/README.md 참고. -->
+     모터 명령 토픽 /<model>/command/motor_speed. 외관 메시는 config/racer_spec.yaml 의 frame_mesh 참고. -->
 <sdf version="1.9">
   <model name="{s['name']}">
     <pose>0 0 {fmt(s['spawn_z'])} 0 0 0</pose>
@@ -127,22 +156,11 @@ def gen_sdf(s):
       </inertial>
       <gravity>true</gravity>
       <velocity_decay/>
-      <!-- ===== 외관 (placeholder). 실제 프레임 STL 이 준비되면 아래 body_visual 을
-           <mesh><uri>model://adr_racer/meshes/frame.stl</uri></mesh> 로 교체 ===== -->
-      <visual name="body_visual">
-        <pose>0 0 0.012 0 0 0</pose>
-        <geometry><box><size>0.11 0.04 0.024</size></box></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="battery_visual">
-        <pose>0 0 0.036 0 0 0</pose>
-        <geometry><box><size>0.075 0.035 0.024</size></box></geometry>
-        <material><ambient>0.05 0.05 0.3 1</ambient><diffuse>0.05 0.05 0.3 1</diffuse></material>
-      </visual>
+{body}
 {chr(10).join(arms)}
       <collision name="base_link_collision">
-        <pose>0 0 0.015 0 0 0</pose>
-        <geometry><box><size>0.20 0.20 0.05</size></box></geometry>
+        <pose>0 0 {fmt(csz[2]/2)} 0 0 0</pose>
+        <geometry><box><size>{fmt(csz[0])} {fmt(csz[1])} {fmt(csz[2])}</size></box></geometry>
         <surface>
           <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
           <friction><ode/></friction>
@@ -243,8 +261,14 @@ param set-default MC_PITCHRATE_MAX 800
 param set-default MC_ROLLRATE_MAX 800
 param set-default MC_YAWRATE_MAX 400
 
-# 데이터링크 loss 시 hold (x500 과 동일)
-param set-default NAV_DLL_ACT 2
+# ---- GCS(QGC)/RC 없이 offboard 만으로 운용 ----
+param set-default COM_RC_IN_MODE 4     # 스틱 입력 비활성 (SITL 기본 1 = joystick only → manual control lost 실패안전 유발)
+param set-default NAV_RCL_ACT 0        # RC loss 실패안전 끔
+param set-default COM_RCL_EXCEPT 4     # bit2: offboard 중 RC loss 무시
+param set-default NAV_DLL_ACT 0        # 데이터링크(GCS) loss 실패안전 끔 (x500 은 2=hold)
+param set-default COM_OBL_ACT 0        # offboard 스트림 끊기면 position hold
+param set-default COM_OF_LOSS_T 1.0    # offboard 끊김 판정 시간 [s]
+param set-default COM_ARM_WO_GPS 1     # GPS 없이 arm 허용 (EV/mocap 모드)
 
 param set-default EKF2_BCOEF_X 0.0
 param set-default EKF2_BCOEF_Y 0.0

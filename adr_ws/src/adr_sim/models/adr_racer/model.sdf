@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 자동 생성: scripts/gen_racer_model.py (스펙: config/racer_spec.yaml). 직접 수정하지 말 것.
-     250급 레이싱 쿼드. 질량 0.75 kg, 모터 대각 250 mm, 5" 프롭.
+     250급 레이싱 쿼드. 질량 0.75 kg, 모터 대각 226 mm, 5" 프롭.
      PX4 gz_bridge 규약: 링크 base_link, 센서 imu_sensor/magnetometer_sensor/air_pressure_sensor/navsat_sensor,
-     모터 명령 토픽 /<model>/command/motor_speed. 외관 STL 교체 지점은 meshes/README.md 참고. -->
+     모터 명령 토픽 /<model>/command/motor_speed. 외관 메시는 config/racer_spec.yaml 의 frame_mesh 참고. -->
 <sdf version="1.9">
   <model name="adr_racer">
-    <pose>0 0 0.05 0 0 0</pose>
+    <pose>0 0 0.01 0 0 0</pose>
     <self_collide>false</self_collide>
     <static>false</static>
     <link name="base_link">
@@ -19,61 +19,40 @@
       </inertial>
       <gravity>true</gravity>
       <velocity_decay/>
-      <!-- ===== 외관 (placeholder). 실제 프레임 STL 이 준비되면 아래 body_visual 을
-           <mesh><uri>model://adr_racer/meshes/frame.stl</uri></mesh> 로 교체 ===== -->
-      <visual name="body_visual">
-        <pose>0 0 0.012 0 0 0</pose>
-        <geometry><box><size>0.11 0.04 0.024</size></box></geometry>
-        <material><ambient>0.15 0.15 0.15 1</ambient><diffuse>0.15 0.15 0.15 1</diffuse></material>
-      </visual>
-      <visual name="battery_visual">
-        <pose>0 0 0.036 0 0 0</pose>
-        <geometry><box><size>0.075 0.035 0.024</size></box></geometry>
-        <material><ambient>0.05 0.05 0.3 1</ambient><diffuse>0.05 0.05 0.3 1</diffuse></material>
-      </visual>
-      <visual name="arm_0_visual">
-        <pose>0.0441942 -0.0441942 0 0 0 -0.785398</pose>
-        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
-        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
+      <!-- ===== 외관: meshes/frame.stl (scale 0.001, rpy 0.0 0.0 -1.5708) ===== -->
+      <visual name="frame_visual">
+        <pose>0 0 0 0 0 -1.5708</pose>
+        <geometry>
+          <mesh>
+            <scale>0.001 0.001 0.001</scale>
+            <uri>model://adr_racer/meshes/frame.stl</uri>
+          </mesh>
+        </geometry>
+        <material><ambient>0.12 0.12 0.12 1</ambient><diffuse>0.12 0.12 0.12 1</diffuse><specular>0.3 0.3 0.3 1</specular></material>
       </visual>
       <visual name="motor_0_visual">
-        <pose>0.0883883 -0.0883883 0.01 0 0 0</pose>
-        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <pose>0.0799031 -0.0799031 0.0175 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.035</length></cylinder></geometry>
         <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
-      </visual>
-      <visual name="arm_1_visual">
-        <pose>-0.0441942 0.0441942 0 0 0 -0.785398</pose>
-        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
-        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
       </visual>
       <visual name="motor_1_visual">
-        <pose>-0.0883883 0.0883883 0.01 0 0 0</pose>
-        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <pose>-0.0799031 0.0799031 0.0175 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.035</length></cylinder></geometry>
         <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
-      </visual>
-      <visual name="arm_2_visual">
-        <pose>0.0441942 0.0441942 0 0 0 0.785398</pose>
-        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
-        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
       </visual>
       <visual name="motor_2_visual">
-        <pose>0.0883883 0.0883883 0.01 0 0 0</pose>
-        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <pose>0.0799031 0.0799031 0.0175 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.035</length></cylinder></geometry>
         <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
       </visual>
-      <visual name="arm_3_visual">
-        <pose>-0.0441942 -0.0441942 0 0 0 0.785398</pose>
-        <geometry><box><size>0.125 0.012 0.006</size></box></geometry>
-        <material><ambient>0.1 0.1 0.1 1</ambient><diffuse>0.1 0.1 0.1 1</diffuse></material>
-      </visual>
       <visual name="motor_3_visual">
-        <pose>-0.0883883 -0.0883883 0.01 0 0 0</pose>
-        <geometry><cylinder><radius>0.014</radius><length>0.02</length></cylinder></geometry>
+        <pose>-0.0799031 -0.0799031 0.0175 0 0 0</pose>
+        <geometry><cylinder><radius>0.014</radius><length>0.035</length></cylinder></geometry>
         <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
       </visual>
       <collision name="base_link_collision">
-        <pose>0 0 0.015 0 0 0</pose>
-        <geometry><box><size>0.20 0.20 0.05</size></box></geometry>
+        <pose>0 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.19 0.19 0.035</size></box></geometry>
         <surface>
           <contact><ode><min_depth>0.001</min_depth><max_vel>0</max_vel></ode></contact>
           <friction><ode/></friction>
@@ -180,7 +159,7 @@
     </link>
     <!-- ===== 전방 카메라 (HFOV 1.57 rad, 640x480 @ 30 Hz, 상향 30°) ===== -->
     <link name="camera_link">
-      <pose>0.08 0 0.02 0 -0.523599 0</pose>
+      <pose>0.045 0 0.022 0 -0.523599 0</pose>
       <inertial>
         <mass>0.01</mass>
         <inertia><ixx>1e-6</ixx><iyy>1e-6</iyy><izz>1e-6</izz></inertia>
@@ -210,7 +189,7 @@
       <gravity>true</gravity>
       <self_collide>false</self_collide>
       <velocity_decay/>
-      <pose>0.0883883 -0.0883883 0.02 0 0 0</pose>
+      <pose>0.0799031 -0.0799031 0.035 0 0 0</pose>
       <inertial>
         <mass>0.004</mass>
         <inertia>
@@ -243,7 +222,7 @@
       <gravity>true</gravity>
       <self_collide>false</self_collide>
       <velocity_decay/>
-      <pose>-0.0883883 0.0883883 0.02 0 0 0</pose>
+      <pose>-0.0799031 0.0799031 0.035 0 0 0</pose>
       <inertial>
         <mass>0.004</mass>
         <inertia>
@@ -276,7 +255,7 @@
       <gravity>true</gravity>
       <self_collide>false</self_collide>
       <velocity_decay/>
-      <pose>0.0883883 0.0883883 0.02 0 0 0</pose>
+      <pose>0.0799031 0.0799031 0.035 0 0 0</pose>
       <inertial>
         <mass>0.004</mass>
         <inertia>
@@ -309,7 +288,7 @@
       <gravity>true</gravity>
       <self_collide>false</self_collide>
       <velocity_decay/>
-      <pose>-0.0883883 -0.0883883 0.02 0 0 0</pose>
+      <pose>-0.0799031 -0.0799031 0.035 0 0 0</pose>
       <inertial>
         <mass>0.004</mass>
         <inertia>

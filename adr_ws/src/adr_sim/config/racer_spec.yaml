@@ -7,9 +7,9 @@
 name: adr_racer
 mass: 0.75                    # [kg] 배터리 포함
 inertia: {ixx: 2.5e-3, iyy: 2.5e-3, izz: 4.5e-3}   # [kg m^2] 강체 근사(0.75 kg, 25 cm 대각)
-arm_length: 0.125             # [m] 중심 → 모터축 (250 mm 대각 / 2)
-rotor_z: 0.02                 # [m] 모터축 높이(base_link 기준)
-spawn_z: 0.05                 # [m] 모델 원점 초기 높이(바닥 위)
+arm_length: 0.113             # [m] 중심 → 모터축. frame.stl 의 모터 마운트가 (±80, ±80) mm → 80√2 = 113 mm (대각 226 mm)
+rotor_z: 0.035                # [m] 프롭 평면 높이(base_link 기준). 암 두께 ~5 mm + 모터 높이
+spawn_z: 0.01                 # [m] 모델 원점 초기 높이(바닥 위). base_link 원점 = 프레임 바닥면
 prop:
   diameter_in: 5.0            # [inch]
   x500_mesh_in: 13.45         # x500_base 프롭 메시 원본 크기 → scale = 5/13.45
@@ -29,8 +29,13 @@ camera:
   hfov: 1.5708                # [rad] 90°
   rate: 30                    # [Hz]
   tilt_deg: 30                # 상향 틸트 (레이싱 카메라 각도)
-  pose_xyz: [0.08, 0.0, 0.02] # base_link 기준 [m]
+  pose_xyz: [0.045, 0.0, 0.022]  # base_link 기준 [m]. frame.stl 의 카메라 마운트 위치
   topic: adr_racer/camera     # gz 토픽 (ros_gz_bridge 가 /adr/camera/image_raw 로 브릿지)
+frame_mesh:                   # 외관. 키를 지우면 박스 placeholder 로 생성
+  file: frame.stl             # meshes/ 아래. 원본: 250.stl (mm 단위, 앞 = +y, 바닥 z=0)
+  scale: 0.001                # mm → m
+  rpy: [0.0, 0.0, -1.5708]    # STL 의 +y(앞) 를 gz 의 +x(앞) 로
+  collision_size: [0.19, 0.19, 0.035]
 px4:
   sys_autostart: 4030
   ec_min: 300                 # SIM_GZ_EC_MINn [rad/s] 아이들
