@@ -17,12 +17,12 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    description='게이트 인식 (step1: stub, step3: Gatenet + PnP)',
+    description='게이트 인식 (색상 기반 2D 검출 → GateDetectionArray; step3: Gatenet + PnP)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'gate_detector_stub = adr_perception.gate_detector_stub:main',
+            'gate_detector = adr_perception.gate_detector:main',
         ],
     },
 )

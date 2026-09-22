@@ -2,17 +2,17 @@
 
 발행
   /adr/gate_markers   visualization_msgs/MarkerArray (latched)  게이트 프레임(주황) + 법선 화살표 + id
-  /adr/gates          adr_interfaces/GateArray (latched)         맵 기반 게이트 목록 (step3 인식 결과와 같은 형식)
+  /adr/gates          adr_msgs/GateArray (latched)         맵 기반 게이트 목록 (step3 인식 결과와 같은 형식)
   /adr/flown_path     nav_msgs/Path                              TF map→base_link 를 주기적으로 샘플링
 """
 import os
 from math import cos, sin
 
 import rclpy
-from adr_interfaces.msg import Gate as GateMsg
-from adr_interfaces.msg import GateArray
+from adr_msgs.msg import Gate as GateMsg
+from adr_msgs.msg import GateArray
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import Point, PoseStamped
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -89,20 +89,31 @@ class GateMarkers(Node):
              base.pose.orientation.z, base.pose.orientation.w) = _quat_z(g.yaw)
             base.color.r, base.color.g, base.color.b, base.color.a = ORANGE
 
-            # 프레임: 게이트 로컬 좌표(x=법선, y=가로, z=세로)에서 4개 CUBE_LIST
-            frame = Marker()
-            frame.header, frame.ns, frame.pose = base.header, 'gate_frame', base.pose
-            frame.id = g.id
-            frame.type = Marker.LINE_LIST        # 폭 w 의 선 4개 = 프레임
-            frame.action = Marker.ADD
-            frame.color = base.color
-            frame.scale.x = w
+            # 프레임 = 게이트 로컬 좌표(x=법선, y=가로, z=세로)의 막대 4개를 CUBE 로.
+            # (LINE_LIST 는 rviz 가 billboard 로 그려 폭이 넓으면 시점에 따라 막대가 사라진다)
             c = half_in + w / 2
-            for (y0, z0, y1, z1) in ((c, -half_out, c, half_out), (-c, -half_out, -c, half_out),
-                                     (-half_in, c, half_in, c), (-half_in, -c, half_in, -c)):
-                frame.points.append(Point(x=0.0, y=y0, z=z0))
-                frame.points.append(Point(x=0.0, y=y1, z=z1))
-            arr.markers.append(frame)
+            thick = self.course.thickness
+            bars = (  # (로컬 오프셋 y, z), (scale y, z)
+                ((c, 0.0), (w, self.course.outer_size)),          # 우측 기둥
+                ((-c, 0.0), (w, self.course.outer_size)),         # 좌측 기둥
+                ((0.0, c), (self.course.inner_size, w)),          # 상단 보
+                ((0.0, -c), (self.course.inner_size, w)),         # 하단 보
+            )
+            cy, sy = cos(g.yaw), sin(g.yaw)
+            for k, ((oy, oz), (sy_, sz_)) in enumerate(bars):
+                bar = Marker()
+                bar.header, bar.ns = base.header, 'gate_frame'
+                bar.id = g.id * 10 + k
+                bar.type = Marker.CUBE
+                bar.action = Marker.ADD
+                bar.color = base.color
+                # 로컬 (0, oy, oz) 를 yaw 로 회전해 월드 위치로
+                bar.pose.position.x = g.x - sy * oy
+                bar.pose.position.y = g.y + cy * oy
+                bar.pose.position.z = g.z + oz
+                bar.pose.orientation = base.pose.orientation
+                bar.scale.x, bar.scale.y, bar.scale.z = thick, sy_, sz_
+                arr.markers.append(bar)
 
             arrow = Marker()
             arrow.header, arrow.ns, arrow.pose = base.header, 'gate_normal', base.pose

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""adr_bringup/config/gates.yaml → worlds/adr_cross.sdf 생성.
+"""adr_bringup/config/gates.yaml → assets/worlds/adr_cross.sdf + assets/models/adr_gate/model.sdf 생성.
 
     python3 scripts/gen_world.py [gates.yaml] [--out worlds/adr_cross.sdf] [--name adr_cross]
 
@@ -88,11 +88,53 @@ WORLD_TAIL = '''  </world>
 </sdf>
 '''
 
+GATE_MAT = '''        <material>
+          <ambient>1.0 0.45 0.0 1</ambient>
+          <diffuse>1.0 0.45 0.0 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+        </material>'''
+
+
+def gen_gate_model(gate: dict) -> str:
+    """gates.yaml 의 gate: {inner_size, outer_size, thickness} → adr_gate model.sdf (box 4개, static)."""
+    inner, outer, thick = float(gate['inner_size']), float(gate['outer_size']), float(gate['thickness'])
+    w = (outer - inner) / 2
+    c = inner / 2 + w / 2
+
+    def bar(name, pose, size):
+        return f'''    <link name="{name}">
+      <pose>{pose}</pose>
+      <visual name="{name}_visual">
+        <geometry><box><size>{size}</size></box></geometry>
+{GATE_MAT}
+      </visual>
+      <collision name="{name}_collision">
+        <geometry><box><size>{size}</size></box></geometry>
+      </collision>
+    </link>
+'''
+    body = ''.join([
+        bar('left', f'0 {c:g} 0 0 0 0', f'{thick:g} {w:g} {outer:g}'),
+        bar('right', f'0 {-c:g} 0 0 0 0', f'{thick:g} {w:g} {outer:g}'),
+        bar('top', f'0 0 {c:g} 0 0 0', f'{thick:g} {inner:g} {w:g}'),
+        bar('bottom', f'0 0 {-c:g} 0 0 0', f'{thick:g} {inner:g} {w:g}'),
+    ])
+    return f'''<?xml version="1.0"?>
+<!-- 자동 생성: adr_sim/scripts/gen_world.py (입력: adr_bringup/config/gates.yaml 의 gate:). 직접 수정하지 말 것.
+     정사각 레이싱 게이트. 내부 {inner:g} m, 외부 {outer:g} m (프레임 폭 {w:g} m), 두께 {thick:g} m.
+     원점 = 개구부 중심, +x = 통과 방향(법선). static 이라 공중에 고정된다(다리 없음). -->
+<sdf version="1.9">
+  <model name="adr_gate">
+    <static>true</static>
+{body}  </model>
+</sdf>
+'''
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('gates', nargs='?', default=DEFAULT_GATES)
-    ap.add_argument('--out', default=os.path.join(PKG, 'worlds', 'adr_cross.sdf'))
+    ap.add_argument('--out', default=os.path.join(PKG, 'assets', 'worlds', 'adr_cross.sdf'))
     ap.add_argument('--name', default='adr_cross')
     ap.add_argument('--racer-model', default='adr_racer')
     args = ap.parse_args()
@@ -121,6 +163,11 @@ def main():
     with open(args.out, 'w') as f:
         f.write(WORLD_HEAD.format(name=args.name) + ''.join(body) + WORLD_TAIL)
     print('wrote', args.out)
+
+    gate_sdf = os.path.join(PKG, 'assets', 'models', 'adr_gate', 'model.sdf')
+    with open(gate_sdf, 'w') as f:
+        f.write(gen_gate_model(d['gate']))
+    print('wrote', gate_sdf)
 
 
 if __name__ == '__main__':

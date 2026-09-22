@@ -3,7 +3,7 @@
 ## 목차
 
 1. [목적과 범위](#1-목적과-범위)
-2. [시스템 구성](#2-시스템-구성)
+2. [노드 및 토픽 구조](#2-노드-및-토픽-구조)
 3. [좌표계와 규약](#3-좌표계와-규약)
 4. [코스 정의 (gates.yaml)](#4-코스-정의-gatesyaml)
 5. [min-snap 궤적 생성](#5-min-snap-궤적-생성)
@@ -24,63 +24,111 @@ step 1 은 인식 없이 **알려진 게이트 맵**으로 한 바퀴를 도는 
 
 | 요소 | step 1 구현 | 비고 |
 |---|---|---|
-| 게이트 인식 | 없음 (`adr_perception/gate_detector_stub` 가 빈 `GateArray` 발행) | step 3 Gatenet 이 같은 토픽/메시지로 교체 |
+| 게이트 인식 | `adr_perception/gate_detector` — 주황 HSV 임계 + 컨투어로 bbox·개구부 중심(2D) 검출. 제어에는 아직 안 씀 | step 3 Gatenet + PnP 가 3D `GateArray` 로 확장 |
 | 위치 추정 | sim: PX4 EKF2(GPS 시뮬) 또는 진실값 주입 / 실기체: mocap → `vehicle_visual_odometry` | 실기체 파라미터 세트 = airframe 4031 |
 | 경로 계획 | `adr_planning` min-snap (7차 piecewise polynomial) | 게이트 중심 + 전후 접근점을 웨이포인트로 |
 | 제어 | `adr_control/px4_position_controller` → `TrajectorySetpoint`(pos+vel+acc feedforward) | step 2 RL 노드가 `OffboardBase` 를 상속해 rate setpoint 로 교체 |
 
-## 2. 시스템 구성
+## 2. 노드 및 토픽 구조
+
+### 2.1 노드 그래프
 
 ```mermaid
-flowchart LR
-  subgraph gz["Gazebo Harmonic (adr_cross.sdf)"]
-    racer[adr_racer 모델<br/>IMU/mag/baro/navsat + camera + OdometryPublisher]
-    gates[adr_gate x4]
-  end
-  subgraph px4["PX4 SITL (standalone, airframe 4030/4031)"]
-    gzb[gz_bridge] --> ekf[EKF2] --> mpc[Position/Attitude/Rate ctrl] --> gzb
-    uxrce[uxrce_dds_client]
-  end
-  agent[MicroXRCEAgent udp4:8888]
-  subgraph ros["ROS 2 Humble"]
-    bridge[ros_gz_bridge<br/>clock, camera, ground truth]
-    planner[adr_planning<br/>gate_planner]
-    ctrl[adr_control<br/>px4_position_controller]
-    markers[adr_bringup<br/>gate_markers]
-    tf[adr_bringup<br/>px4_odom_to_tf]
-    stub[adr_perception<br/>gate_detector_stub]
-    rviz[rviz2]
-  end
-  yaml[(gates.yaml)] --> planner
-  yaml --> markers
-  yaml -. gen_world.py .-> gz
-  racer -- gz transport --> gzb
-  racer -- /adr_racer/camera --> bridge --> stub
-  uxrce <--> agent <--> ros
-  planner -- /adr/trajectory<br/>/adr/planned_path --> ctrl
-  ctrl -- /fmu/in/offboard_control_mode<br/>/fmu/in/trajectory_setpoint<br/>/fmu/in/vehicle_command --> agent
-  agent -- /fmu/out/vehicle_local_position<br/>/fmu/out/vehicle_status<br/>/fmu/out/vehicle_odometry --> ctrl
-  agent --> tf --> rviz
-  markers --> rviz
-  planner --> rviz
+graph TD
+    GZ["Gazebo Harmonic<br/>(adr_cross.sdf, SITL)"]
+    MOCAP["Qualisys<br/>(motion_capture_tracking) 실기체"]
+    USBCAM["/dev/video0<br/>(v4l2_camera) 실기체"]
+
+    subgraph adr_sim ["adr_sim (SITL 전용)"]
+        SIMLAUNCH["sim.launch.py<br/>gz + Agent + PX4 SITL + bridge 기동"]
+        GZBRIDGE["ros_gz_bridge"]
+    end
+
+    subgraph adr_video ["adr_video"]
+        RELAY["camera_relay 실기체"]
+    end
+
+    IMAGE(["/adr/camera/image_raw"])
+
+    subgraph adr_perception ["adr_perception"]
+        DET["gate_detector<br/>(HSV 주황 → bbox·개구부 중심)"]
+    end
+
+    DETECTED(["/adr/gate_detections"])
+    DEBUG(["/adr/perception/debug_image<br/>(구독자 있을 때만)"])
+    GATES_YAML[("gates.yaml")]
+
+    subgraph adr_planning ["adr_planning"]
+        PLAN["gate_planner<br/>(min-snap)"]
+    end
+
+    TRAJ(["/adr/trajectory"])
+
+    subgraph adr_control ["adr_control"]
+        CTRL["px4_position_controller<br/>(상태머신 + TrajectorySetpoint)"]
+    end
+
+    subgraph adr_bringup ["adr_bringup"]
+        MB["mocap_bridge 실기체"]
+        O2TF["px4_odom_to_tf"]
+        MARK["gate_markers"]
+    end
+
+    FMU_IN(["/fmu/in/*<br/>offboard_control_mode · trajectory_setpoint · vehicle_command"])
+    FMU_OUT(["/fmu/out/*<br/>vehicle_local_position · vehicle_status · vehicle_odometry"])
+    EV(["/fmu/in/vehicle_visual_odometry"])
+    AGENT["MicroXRCEAgent"]
+    PX4["PX4<br/>(SITL / 실기체 FC)"]
+    RVIZ["rviz2"]
+
+    GZ -->|gz topic| GZBRIDGE --> IMAGE
+    USBCAM --> RELAY --> IMAGE
+    IMAGE --> DET --> DETECTED
+    DET -.-> DEBUG
+    GATES_YAML --> PLAN --> TRAJ --> CTRL
+    GATES_YAML --> MARK
+    CTRL --> FMU_IN --> AGENT
+    AGENT --> FMU_OUT --> CTRL
+    FMU_OUT --> O2TF -.->|TF map→base_link| MARK
+    O2TF --> RVIZ
+    MARK --> RVIZ
+    PLAN -->|/adr/planned_path| RVIZ
+    MOCAP -->|/poses| MB --> EV --> AGENT
+    GZ -.->|"OdometryPublisher 진실값<br/>ev:=true 일 때 EKF2 가 사용"| PX4
+    AGENT <-->|uXRCE-DDS| PX4
+    PX4 <-->|센서 / 모터 명령| GZ
 ```
 
-### 토픽 계약
+step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner → px4_position_controller → PX4** 한 줄이다.
+카메라·인식 경로는 돌아가지만 아직 제어에 쓰이지 않고(step 3 에서 PnP → 위치 추정에 결합), mocap 경로는 실기체 전용이다(sim 에서는 gz `OdometryPublisher` 가 같은 역할).
 
-| 토픽 | 타입 | 발행 | 구독 | QoS |
-|---|---|---|---|---|
-| `/adr/trajectory` | `adr_interfaces/PolynomialTrajectory` | gate_planner | px4_position_controller | reliable, **transient_local** |
-| `/adr/planned_path` | `nav_msgs/Path` | gate_planner | rviz | transient_local |
-| `/adr/gates` | `adr_interfaces/GateArray` | gate_markers (맵) | (step 2 RL 관측) | transient_local |
-| `/adr/detected_gates` | `adr_interfaces/GateArray` | gate_detector (stub) | (step 3 PnP/맵 정합) | default |
-| `/adr/gate_markers` | `visualization_msgs/MarkerArray` | gate_markers | rviz | transient_local |
-| `/adr/flown_path` | `nav_msgs/Path` | gate_markers (TF 누적) | rviz | default |
-| `/adr/odom` + TF `map→base_link` | `nav_msgs/Odometry` | px4_odom_to_tf | rviz, gate_markers | default |
-| `/adr/camera/image_raw`, `camera_info` | `sensor_msgs/Image`, `CameraInfo` | ros_gz_bridge (sim) / camera_relay (실기체) | gate_detector | best effort |
-| `/adr/ground_truth/odom` | `nav_msgs/Odometry` | ros_gz_bridge | 평가 스크립트 | default |
-| `/adr/controller_state` | `std_msgs/String` | px4_position_controller | 디버그 | default |
-| `/fmu/in/*` | px4_msgs | adr_control, mocap_bridge | PX4 | best effort |
-| `/fmu/out/*` | px4_msgs | PX4 | adr_control, px4_odom_to_tf | **best effort + volatile** (reliable 로 구독하면 안 옴) |
+### 2.2 노드별 pub/sub
+
+| 노드 | subscribe | publish |
+|---|---|---|
+| `gate_planner` | — (gates.yaml 파일) | `/adr/trajectory` (latched)<br/>`/adr/planned_path` |
+| `px4_position_controller` | `/adr/trajectory`<br/>`/fmu/out/vehicle_local_position`<br/>`/fmu/out/vehicle_status` | `/fmu/in/offboard_control_mode` (50 Hz)<br/>`/fmu/in/trajectory_setpoint` (50 Hz)<br/>`/fmu/in/vehicle_command`<br/>`/adr/controller_state` |
+| `px4_odom_to_tf` | `/fmu/out/vehicle_odometry` | TF `map→base_link`<br/>`/adr/odom` |
+| `gate_markers` | TF `map→base_link` | `/adr/gate_markers`, `/adr/gates` (latched)<br/>`/adr/flown_path` |
+| `mocap_bridge` (실기체) | `/poses` 또는 TF `mocap→adr_racer` | `/fmu/in/vehicle_visual_odometry` |
+| `ros_gz_bridge` (SITL) | gz `/adr_racer/camera`, `/clock`, `/model/adr_racer/odometry` | `/adr/camera/image_raw`, `/clock`, `/adr/ground_truth/odom` |
+| `camera_relay` (실기체) | `/image_raw` (v4l2_camera) | `/adr/camera/image_raw` |
+| `gate_detector` | `/adr/camera/image_raw` | `/adr/gate_detections` (2D bbox·중심, 면적순)<br/>(구독 있을 때만) `/adr/perception/debug_image` |
+
+`/fmu/out/*` 는 **best effort + volatile** 로 구독해야 한다(reliable 로 구독하면 아무것도 안 온다). 버전 관리되는 메시지는 토픽에 `_v<N>` 이 붙으며(예: `vehicle_status_v4`) `offboard_base.px4_topic()` 이 `MESSAGE_VERSION` 상수로 자동으로 맞춘다.
+
+### 2.3 노드별 역할
+
+| 노드 | 패키지 | 역할 | 실행 환경 |
+|---|---|---|---|
+| `sim.launch.py` | `adr_sim` | gz 월드 + MicroXRCEAgent + PX4 SITL(airframe 주입, daemon) + ros_gz_bridge + 시각화를 한 번에 기동 | SITL |
+| `gate_planner` | `adr_planning` | `gates.yaml` 의 게이트 중심·전후 접근점을 웨이포인트로 min-snap 궤적을 한 번 풀어 latched 발행 | 공통 |
+| `px4_position_controller` | `adr_control` | 상태머신(warmup→arm→offboard→이륙→궤적 추종→hold→착륙). ENU 궤적을 NED `TrajectorySetpoint` 로 50 Hz 발행. step 2 RL 노드가 같은 `OffboardBase` 를 상속해 교체 | 공통 |
+| `px4_odom_to_tf` | `adr_bringup` | PX4 odometry(NED/FRD) → TF `map→base_link`(ENU/FLU) | 공통 |
+| `gate_markers` | `adr_bringup` | 게이트 프레임(CUBE)·법선·id 마커, 맵 기반 `GateArray`, TF 누적 비행 경로 | 공통 |
+| `mocap_bridge` | `adr_bringup` | mocap 포즈(ENU) → `VehicleOdometry`(NED) 로 PX4 EKF2 에 주입 | 실기체 |
+| `camera_relay` | `adr_video` | 카메라 드라이버 출력을 `/adr/camera/image_raw` 규격으로 통일 | 실기체 |
+| `gate_detector` | `adr_perception` | 주황 HSV 임계 → 모폴로지 → `RETR_CCOMP` 컨투어(바깥 프레임 + 안쪽 구멍). 게이트마다 bbox, 개구부 중심(구멍 모멘트), 면적, 간이 신뢰도. 디버그 오버레이는 `rqt_image_view /adr/perception/debug_image` 로 볼 때만 생성. 파라미터 `adr_perception/config/gate_detector.yaml` | 공통 |
 
 ## 3. 좌표계와 규약
 
@@ -93,7 +141,9 @@ flowchart LR
 - 변환은 전부 `adr_control/frames.py` 한 곳에서: `(e,n,u) ↔ (n,e,−u)`, `yaw_ned = π/2 − yaw_enu`, 쿼터니언은 `q_ENU→NED=(0,√½,√½,0)`, `q_FLU→FRD=(0,1,0,0)` (PX4 gz_bridge 와 동일 상수). `test/test_frames.py` 가 왕복·기수방향을 검증한다.
 - 모든 노드의 public 인터페이스는 ENU 이고 **PX4 경계(publish/subscribe 콜백)에서만** NED 로 바꾼다.
 - 게이트 `yaw_deg` = 통과 방향(개구부 법선)의 방위각, ENU CCW. ⚠️ crazyflie 레포 `gates.yaml` 은 CW 관례였으므로 값을 복사해 오면 안 된다.
-- `map` 원점 = PX4 local origin = 기체 전원 인가(EKF 초기화) 위치. 실기체에서는 mocap 원점을 그대로 쓰므로(EKF2 EV 만 사용) mocap 원점 = `map` 원점이 된다. sim 에서 GPS 모드(4030)일 때는 스폰 위치가 local origin 이 되므로 `gates.yaml` 의 `start` 를 스폰 위치와 같게 둔다 (`gen_world.py` 가 자동으로 그렇게 배치).
+- `map` = `gates.yaml` 좌표계 = gz 월드 = mocap 프레임. **PX4 local 원점과의 관계는 `origin_mode` 로 처리**한다.
+  - `world`(기본, sim `ev:=true` / 실기체 mocap): EKF2 가 외부 위치를 그대로 쓰므로 PX4 local == map. offset 0.
+  - `start`(sim `ev:=false` = GPS 시뮬): PX4 local 원점 = 부팅(스폰) 위치. 기체가 `start` 에 놓여 있다고 보고 컨트롤러가 이륙 전 `offset = start − p_local` 을 한 번 재서 모든 세트포인트를 보정하고, `/adr/local_origin`(latched) 으로 `px4_odom_to_tf` 에도 알린다. 이걸 안 하면 코스 전체가 `−start` 만큼 평행이동한 자리에서 비행한다(초기 증상). GPS 모드는 월드 자기장 편각(14.6°)과 EKF2 lookup 편각(취리히 ~3°) 차이로 yaw 도 어긋날 수 있어 **sim 기본은 `ev:=true`** 로 둔다.
 
 ## 4. 코스 정의 (gates.yaml)
 
@@ -114,7 +164,7 @@ flowchart LR
 - 반지름 4 m 원 위에 90° 간격, 게이트 중심 높이 1.5 m, 법선 = 원의 접선(CCW 진행).
 - 게이트: 내부 1.5 m, 외부 2.1 m(프레임 폭 0.3 m), 두께 0.1 m, 주황색.
 - `start` = 이륙 지점(바닥). G4→G1 사이 원호 위에 두어 이륙 후 첫 진입이 자연스럽다.
-- 값을 바꾸면 **`adr_sim/scripts/gen_world.py`** 를 다시 돌려 월드를 갱신하고 커밋한다(planner/markers 는 yaml 을 직접 읽으므로 자동 반영).
+- 값을 바꾸면 **`adr_sim/scripts/gen_world.py`** 를 다시 돌려 월드와 게이트 모델(`gate:` 치수)을 갱신하고 커밋한다(planner/markers 는 yaml 을 직접 읽으므로 자동 반영).
 
 ## 5. min-snap 궤적 생성
 
@@ -140,10 +190,24 @@ flowchart LR
 
 ### `PositionController` 상태기계
 
+```mermaid
+stateDiagram-v2
+    [*] --> WAIT_TRAJ
+    WAIT_TRAJ --> WARMUP : /adr/trajectory + PX4 위치·상태 수신
+    WARMUP --> ARMING : hold 세트포인트 warmup_count(20)회 발행
+    ARMING --> TAKEOFF : offboard 진입 & armed (1 Hz 재요청)
+    TAKEOFF --> TRACK : 호버점 pos_tol 이내 & 저속<br/>(또는 takeoff_timeout)
+    TRACK --> HOLD : t ≥ 궤적 길이
+    HOLD --> LAND : hold_time 경과 (land_after)
+    LAND --> DONE : disarm 확인
 ```
-WAIT_TRAJ ─(궤적+위치+상태 수신)→ WARMUP ─(세트포인트 20회)→ ARMING ─(offboard & armed)→ TAKEOFF
-  ─(호버점 도달)→ TRACK ─(t ≥ T)→ HOLD ─(hold_time, land_after)→ LAND ─(disarm)→ DONE
-```
+
+| 상태 | OffboardControlMode | 세트포인트 |
+|---|---|---|
+| WARMUP / ARMING | position | 현재 위치(바닥) hold, yaw = 궤적 시작 yaw |
+| TAKEOFF / HOLD | position | 궤적 시작점 / 끝점 hold |
+| TRACK | position + velocity + acceleration | 궤적 샘플 pos/vel/acc/yaw/yawrate (feedforward) |
+| LAND | — (NAV_LAND 명령, 세트포인트 중단) | — |
 
 - PX4 는 offboard 진입 전에 세트포인트 스트림(≥2 Hz)이 이미 흐르고 있어야 하므로 WARMUP 에서 현재 위치 hold 를 먼저 보낸다.
 - TAKEOFF/HOLD 는 `position` 만, TRACK 은 `position+velocity+acceleration`(feedforward) 을 `OffboardControlMode` 에 켠다. 첫 비행에서 튀면 `controller.yaml` 의 `feedforward: false`, launch 인자 `time_scale:=0.5` 로 낮춘다.
@@ -167,7 +231,7 @@ WAIT_TRAJ ─(궤적+위치+상태 수신)→ WARMUP ─(세트포인트 20회)�
 
 PX4 gz_bridge 규약 때문에 **링크 `base_link`, 센서 이름 `imu_sensor / magnetometer_sensor / air_pressure_sensor / navsat_sensor`, 모터 명령 토픽 `/<model>/command/motor_speed`** 는 x500 과 같아야 한다(`scripts/px4_sensors.sdf.inc` 에서 그대로 삽입).
 
-airframe `4030_gz_adr_racer`: `4001_gz_x500` 기반. `CA_ROTORn_PX/PY = ±0.0884`(FRD), `SIM_GZ_EC_MIN/MAX = 300/3000`(= `maxRotVelocity`), `MPC_THR_HOVER 0.31`(ω_hover=√(mg/4k_f)=1146 rad/s 를 [300,3000] 에 선형 매핑), 레이싱용 `MPC_XY_VEL_MAX 10`, `MPC_ACC_HOR 8`, `MPC_JERK_AUTO 20`, `MPC_TILTMAX_AIR 60`. MC 자세/각속도 게인은 `rc.mc_defaults` 그대로이므로 **첫 호버에서 진동하면 `MC_ROLLRATE_P/PITCHRATE_P` 를 0.1 → 0.05 부터 낮춘다.**
+airframe `4030_gz_adr_racer`: `4001_gz_x500` 기반. `CA_ROTORn_PX/PY = ±0.080`(FRD, frame.stl 모터 마운트 실측), `SIM_GZ_EC_MIN/MAX = 300/3000`(= `maxRotVelocity`), `MPC_THR_HOVER 0.31`(ω_hover=√(mg/4k_f)=1146 rad/s 를 [300,3000] 에 선형 매핑), 레이싱용 `MPC_XY_VEL_MAX 10`, `MPC_ACC_HOR 8`, `MPC_JERK_AUTO 20`, `MPC_TILTMAX_AIR 60`. MC 자세/각속도 게인은 `rc.mc_defaults` 그대로이므로 **첫 호버에서 진동하면 `MC_ROLLRATE_P/PITCHRATE_P` 를 0.1 → 0.05 부터 낮춘다.**
 
 airframe `4031_gz_adr_racer_ev`: 4030 + `EKF2_EV_CTRL 15`, `EKF2_HGT_REF 3`, `EKF2_GPS_CTRL 0`, `EKF2_BARO_CTRL 0`. 외부 위치(sim: OdometryPublisher 진실값, 실기체: mocap)만으로 EKF2 를 돌리는 세트.
 
@@ -181,63 +245,73 @@ box 링크 4개(좌·우·상·하)로 된 static 모델. 원점 = 개구부 중
 
 ## 8. 환경 설치 (Ubuntu VM)
 
+버전 조합: Ubuntu 22.04 + ROS 2 Humble + **Gazebo Harmonic** + PX4 v1.18 (+ px4_msgs 는 PX4 와 같은 버전의 submodule).
+
 ```bash
-# 1) ROS 2 Humble + Gazebo Harmonic + ros_gz (non-default pairing; ros-humble-ros-gz* 와 동시 설치 금지)
+# 1) ROS 2 Humble + Gazebo Harmonic
 sudo apt install ros-humble-desktop ros-dev-tools
 sudo curl https://packages.osrfoundation.org/gazebo.gpg -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list
-sudo apt update && sudo apt install gz-harmonic ros-humble-ros-gzharmonic
+sudo apt update && sudo apt install gz-harmonic
 
-# 2) PX4-Autopilot v1.16 (레포 밖, ~/PX4-Autopilot). ubuntu.sh 가 gz-harmonic 을 설치한다.
-git clone -b release/1.16 --recursive https://github.com/PX4/PX4-Autopilot.git ~/PX4-Autopilot
+# 2) ros_gz 를 Harmonic 으로 소스 빌드 (apt 의 ros-humble-ros-gz* 는 Fortress 기준이라 사용 불가)
+sudo apt install libgz-msgs10-dev libgz-transport13-dev -y
+mkdir -p ~/ros_gz_harmonic_ws/src && cd ~/ros_gz_harmonic_ws/src
+git clone https://github.com/gazebosim/ros_gz.git -b humble
+cd ~/ros_gz_harmonic_ws && source /opt/ros/humble/setup.bash
+GZ_VERSION=harmonic colcon build --packages-select ros_gz_interfaces ros_gz_bridge ros_gz_sim ros_gz_image
+
+# 3) PX4-Autopilot (레포 밖, ~/PX4-Autopilot). 빌드만 하면 되고 소스 수정은 없다.
+git clone -b release/1.18 --recursive https://github.com/PX4/PX4-Autopilot.git ~/PX4-Autopilot
 bash ~/PX4-Autopilot/Tools/setup/ubuntu.sh
-cd ~/PX4-Autopilot && make px4_sitl        # 최초 빌드
+cd ~/PX4-Autopilot && make px4_sitl
 
-# 3) Micro-XRCE-DDS-Agent (레포 밖)
+# 4) Micro-XRCE-DDS-Agent (레포 밖). ROS 가 source 되지 않은 셸에서 빌드해야 fastcdr 버전 충돌이 없다.
 git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git ~/Micro-XRCE-DDS-Agent
-cd ~/Micro-XRCE-DDS-Agent && mkdir build && cd build && cmake .. && make -j$(nproc) && sudo make install && sudo ldconfig /usr/local/lib/
+cd ~/Micro-XRCE-DDS-Agent && mkdir build && cd build
+env -i HOME=$HOME PATH=/usr/local/bin:/usr/bin:/bin bash -c 'cmake .. && make -j$(nproc) && sudo make install && sudo ldconfig /usr/local/lib/'
+#   (대안) sudo snap install micro-xrce-dds-agent --edge  → launch 에 agent:=micro-xrce-dds-agent
 
-# 4) 이 레포 (메시는 git LFS)
+# 5) 이 레포 (메시는 git LFS)
 sudo apt install git-lfs && git lfs install
 git clone --recursive https://github.com/sungho2574/autonomous-drone-racing.git
 cd autonomous-drone-racing/adr_ws
+source ~/ros_gz_harmonic_ws/install/setup.bash
 rosdep install --from-paths src --ignore-src -r -y     # motion_capture_tracking 의존성 포함
-colcon build --symlink-install
+colcon build --symlink-install                          # px4_msgs 가 수 분 걸린다. 중단하면 install 이 빠지니 끝까지
 source install/setup.bash
-
-# 5) PX4 에 airframe 등록 후 재빌드 (최초 1회, 스펙 변경 시 재실행)
-PX4_DIR=~/PX4-Autopilot src/adr_sim/scripts/install_px4_assets.sh
-cd ~/PX4-Autopilot && make px4_sitl
 ```
 
-- `install_px4_assets.sh` 는 `adr_sim/px4/airframes/*` 를 `ROMFS/px4fmu_common/init.d-posix/airframes/` 에 심볼릭 링크하고 그 디렉터리의 `CMakeLists.txt` `px4_add_romfs_files(...)` 에 항목을 넣는다(멱등).
-- px4_msgs 는 PX4 버전과 메시지 정의가 맞아야 한다: PX4 `release/1.16` ↔ px4_msgs `release/1.16` (submodule 로 고정).
+- PX4 airframe(`adr_sim/assets/px4/airframes/4030_*, 4031_*`)은 **실행할 때마다** `sim.launch.py` 가 `$PX4_DIR/build/px4_sitl_default/etc/init.d-posix/airframes/` 에 복사한다. ROMFS 등록·재빌드가 필요 없고, `make px4_sitl` 로 etc 가 다시 만들어져도 다음 실행에 다시 들어간다.
+- px4_msgs 는 PX4 버전과 메시지 정의가 맞아야 한다(어긋나면 빌드는 되지만 `/fmu/out/*` 이 조용히 안 들어온다). 버전 관리되는 메시지는 토픽에 `_v<N>` 이 붙으며 코드가 `MESSAGE_VERSION` 상수에서 자동으로 맞춘다.
 
 ## 9. 실행 절차
 
+터미널 2개. 둘 다 `source /opt/ros/humble/setup.bash && source ~/ros_gz_harmonic_ws/install/setup.bash && source ~/autonomous-drone-racing/adr_ws/install/setup.bash` 를 먼저.
+
 ```bash
-# T1 — gz 월드 + ros_gz_bridge + gate_markers + odom→TF + rviz   (gui:=false 로 headless)
-ros2 launch adr_bringup sim.launch.py
+# T1 — 시뮬 일괄: gz 월드 + MicroXRCEAgent + PX4 SITL(daemon) + ros_gz_bridge + gate_markers + odom→TF + rviz
+ros2 launch adr_sim sim.launch.py
+#   ev:=false       airframe 4030 GPS 시뮬 (기본 true = 4031 진실값 주입). false 면 T2 에 origin_mode:=start
+#   gui:=false      gz headless        rviz:=false
+#   soft_gl:=0      GPU 있는 머신 (기본 1 = llvmpipe)
+#   agent:=micro-xrce-dds-agent   snap 설치본      px4_dir:=/path/to/PX4-Autopilot
 
-# T2 — DDS 에이전트
-MicroXRCEAgent udp4 -p 8888
-
-# T3 — PX4 SITL: 실행 중인 월드의 adr_racer 에 attach (PX4_DIR 기본 ~/PX4-Autopilot)
-adr_ws/src/adr_sim/scripts/run_px4_sitl.sh          # airframe 4030 (GPS 시뮬)
-adr_ws/src/adr_sim/scripts/run_px4_sitl.sh --ev     # airframe 4031 (진실값 = mocap 에뮬레이션)
-#   pxh> 프롬프트에서 commander takeoff 로 호버 확인 가능
-
-# T4 — step1 파이프라인
+# T2 — step1 파이프라인 (gate_planner + px4_position_controller)
 ros2 launch adr_bringup step1.launch.py laps:=2 time_scale:=1.0 land_after:=true
 ```
 
-`run_px4_sitl.sh` 가 설정하는 환경변수: `PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=adr_cross PX4_SYS_AUTOSTART=4030|4031`. gz 는 이미 떠 있어야 하며 월드 이름(`<world name="adr_cross">`)과 모델 이름이 일치해야 한다.
+`sim.launch.py` 내부 순서: `GZ_SIM_RESOURCE_PATH` 에 `adr_sim/assets/{models,worlds}` 추가 → gz 서버(+GUI) → Agent → PX4 `ExecuteProcess`(airframe 복사·잔여 px4 정리 후, `/world/adr_cross/clock` 이 보일 때까지 대기하고 `PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=adr_cross PX4_SYS_AUTOSTART=4030|4031` 로 PX4 기동) → 브릿지·시각화 노드. 월드 이름(`<world name="adr_cross">`)과 모델 이름이 PX4 env 와 일치해야 한다.
+
+PX4 는 daemon 모드라 `pxh>` 셸이 없다. 명령은 클라이언트 바이너리로: `~/PX4-Autopilot/build/px4_sitl_default/bin/px4-commander check`, `px4-param set MPC_XY_VEL_MAX 5`, `px4-commander takeoff`. `pxh>` 셸이 꼭 필요하면 launch 대신 gz 를 띄운 상태에서 `cd ~/PX4-Autopilot/build/px4_sitl_default && PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=adr_cross PX4_SYS_AUTOSTART=4030 ./bin/px4 ./etc -s etc/init.d-posix/rcS` 를 직접 실행한다(launch 의 PX4 와 중복 실행 금지).
 
 유용한 확인 명령:
 
 ```bash
 ros2 topic echo /adr/controller_state
-ros2 topic hz /fmu/out/vehicle_local_position
+ros2 run rqt_image_view rqt_image_view /adr/perception/debug_image   # 게이트 검출 오버레이 (구독하는 동안만 생성)
+ros2 topic list | grep fmu              # 실제 토픽 이름(_v 접미사) 확인
+ros2 topic hz /fmu/out/vehicle_local_position_v1
 gz topic -l | grep adr_racer
 ros2 run adr_planning plot_trajectory --gates adr_ws/src/adr_bringup/config/gates.yaml --laps 2
 ```
@@ -257,12 +331,12 @@ sim 에서는 `--ev` 로 같은 EKF2 경로를 미리 검증할 수 있다(모�
 
 macOS(작성 머신):
 - [ ] `python -m pytest adr_ws/src/adr_planning` 와 `python -m pytest adr_ws/src/adr_control` (numpy, pyyaml, pytest)
-- [ ] `xmllint --noout adr_ws/src/adr_sim/models/*/model.sdf adr_ws/src/adr_sim/worlds/*.sdf`
+- [ ] `xmllint --noout adr_ws/src/adr_sim/assets/models/*/model.sdf adr_ws/src/adr_sim/assets/worlds/*.sdf`
 - [ ] `gen_world.py` / `gen_racer_model.py` 재실행 결과가 커밋본과 동일
 
 Ubuntu VM:
 - [ ] `colcon build --symlink-install` 무오류, `ros2 pkg list | grep adr_`
-- [ ] `sim.launch.py`: 게이트 4개·드론 표시, `ros2 topic hz /adr/camera/image_raw` ≈ 30 Hz, rviz 에 게이트 마커
+- [ ] `ros2 launch adr_sim sim.launch.py`: 게이트 4개·드론 표시, `ros2 topic hz /adr/camera/image_raw` ≈ 30 Hz, rviz 에 게이트 마커, 로그에 `[px4] … airframes→` 와 PX4 `Ready for takeoff!`
 - [ ] PX4 SITL 이 `adr_racer` 에 붙어 `commander takeoff` 로 호버 (진동 없음)
 - [ ] `step1.launch.py`: 자동 arm → 이륙 → 4게이트 × 2바퀴 → hold → 착륙. rviz 에서 planned(초록) vs flown(빨강) 경로 겹침, 게이트 통과 시 오차 < 0.3 m
 - [ ] `--ev` 로 GPS 없이 동일 비행
@@ -279,7 +353,13 @@ Ubuntu VM:
 | 호버에서 진동/뒤집힘 | 추력/관성 대비 게인 과다. `MC_ROLLRATE_P`, `MC_PITCHRATE_P` 를 낮추거나 `motorConstant`/`MPC_THR_HOVER` 재확인 |
 | 궤적 추종이 늦고 안쪽으로 잘림 | `MPC_XY_VEL_MAX`/`MPC_ACC_HOR` 한계. `time_scale` 을 낮추거나 planner `v_max`/`a_max` 를 줄임 |
 | yaw 가 90° 틀어짐 | ENU↔NED yaw 변환 누락. `frames.yaw_enu_to_ned` 를 통했는지, 실기체는 rigid body x 축 정의 확인 |
-| 프롭 메시가 안 보임 | `GZ_SIM_RESOURCE_PATH` 에 `adr_sim/models` 가 없음. `source install/setup.bash`(env hook) 또는 `scripts/setup_env.sh` |
+| 프롭/프레임 메시가 안 보임 | `GZ_SIM_RESOURCE_PATH` 에 `adr_sim/assets/models` 가 없음. `sim.launch.py` 가 넣어주며, gz 를 수동으로 띄울 땐 `GZ_SIM_RESOURCE_PATH=$(ros2 pkg prefix adr_sim)/share/adr_sim/assets/models:…` 를 직접 export |
+| PX4 `no autostart file found (…/4030_*)` | `px4_dir` 오류 또는 `make px4_sitl` 미완료. 로그의 `[px4] … airframes→` 줄에서 복사 경로 확인 |
+| PX4 `waiting for gz world` 후 60 s 에 종료 | gz 서버가 안 떴거나(렌더 에러) 월드 이름 불일치. T1 로그 앞부분의 gz 에러 확인 |
+| gz `Ogre::UnimplementedException` abort | GPU 없는 VM. `soft_gl:=1`(기본) 로 llvmpipe. GPU 있으면 `soft_gl:=0` 이 훨씬 빠름 |
+| gz 가 `ign gazebo --force-version 6` 로 뜸 / `Unknown message type [9]` | apt 의 Fortress 용 ros_gz 가 잡힘. `~/ros_gz_harmonic_ws` 를 먼저 source |
+| Agent 빌드 시 `fastcdr` version 2 not found | ROS 가 source 된 셸에서 빌드함. §8 4) 처럼 `env -i` 로 빌드 |
+| px4_msgs import 실패 | colcon 빌드가 install 단계 전에 중단됨. `colcon build --packages-select px4_msgs` 후 다시 source |
 | `ros-humble-ros-gzharmonic` 설치 충돌 | 기존 `ros-humble-ros-gz*`(Fortress) 제거 후 설치 |
 
 ## 13. 다음 단계(step 2/3)와의 접점

@@ -1,0 +1,10 @@
+gate_detector:
+  ros__parameters:
+    image_topic: /adr/camera/image_raw
+    hsv_lower: [3, 100, 60]       # OpenCV HSV (H 0~179). sim 게이트 주황(1.0,0.45,0) 기준
+    hsv_upper: [25, 255, 255]
+    min_area: 150.0               # 프레임 픽셀 면적 하한
+    min_hole_area: 30.0           # 개구부 하한
+    morph_kernel: 3
+    max_gates: 4
+    debug_topic: /adr/perception/debug_image

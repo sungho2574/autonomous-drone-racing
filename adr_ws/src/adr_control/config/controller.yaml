@@ -4,6 +4,8 @@ px4_position_controller:
     warmup_count: 20
     auto_arm: true
     fmu_ns: ""
+    origin_mode: world      # world: PX4 local == map (EV/mocap). start: GPS 시뮬 — 부팅 위치를 gates.yaml start 로 간주해 offset 보정
+    gates_file: ""         # origin_mode=start 일 때. 비우면 adr_bringup/config/gates.yaml
     trajectory_topic: /adr/trajectory
     pos_tol: 0.25
     vel_tol: 0.3

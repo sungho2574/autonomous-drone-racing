@@ -3,13 +3,16 @@
 <package format="3">
   <name>adr_perception</name>
   <version>0.1.0</version>
-  <description>게이트 인식 (step1: stub, step3: Gatenet)</description>
+  <description>게이트 인식 (색상 기반 2D 검출, step3: Gatenet + PnP)</description>
   <maintainer email="sungho2574@gmail.com">sungho</maintainer>
   <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>adr_interfaces</exec_depend>
+  <exec_depend>adr_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 import rclpy
-from adr_interfaces.msg import PolynomialSegment, PolynomialTrajectory
+from adr_msgs.msg import PolynomialSegment, PolynomialTrajectory
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path

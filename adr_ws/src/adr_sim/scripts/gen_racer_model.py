@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""racer_spec.yaml → models/adr_racer/model.sdf + px4/airframes/4030_gz_adr_racer 생성.
+"""racer_spec.yaml → assets/models/adr_racer/model.sdf + assets/px4/airframes/4030_gz_adr_racer 생성.
 
     python3 scripts/gen_racer_model.py            # adr_sim 패키지 루트에서
 """
@@ -227,7 +227,7 @@ def gen_airframe(s):
 # @type Quadrotor
 #
 # 자동 생성: adr_sim/scripts/gen_racer_model.py (스펙: config/racer_spec.yaml). 직접 수정하지 말 것.
-# 설치: adr_sim/scripts/install_px4_assets.sh 가 PX4 ROMFS airframes 에 링크·등록한다.
+# 설치: adr_sim/launch/sim.launch.py 가 실행 때마다 PX4 build/px4_sitl_default/etc/init.d-posix/airframes/ 에 복사한다.
 
 . ${{R}}etc/init.d/rc.mc_defaults
 
@@ -280,8 +280,8 @@ def main():
     spec_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PKG, 'config', 'racer_spec.yaml')
     with open(spec_path) as f:
         s = yaml.safe_load(f)
-    sdf_path = os.path.join(PKG, 'models', s['name'], 'model.sdf')
-    af_path = os.path.join(PKG, 'px4', 'airframes', f"{s['px4']['sys_autostart']}_gz_{s['name']}")
+    sdf_path = os.path.join(PKG, 'assets', 'models', s['name'], 'model.sdf')
+    af_path = os.path.join(PKG, 'assets', 'px4', 'airframes', f"{s['px4']['sys_autostart']}_gz_{s['name']}")
     os.makedirs(os.path.dirname(sdf_path), exist_ok=True)
     os.makedirs(os.path.dirname(af_path), exist_ok=True)
     with open(sdf_path, 'w') as f:

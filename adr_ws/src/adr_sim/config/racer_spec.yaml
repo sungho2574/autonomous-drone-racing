@@ -1,5 +1,5 @@
 # 250급 레이싱 드론 스펙 — gen_racer_model.py 가 읽어
-#   models/adr_racer/model.sdf 와 px4/airframes/4030_gz_adr_racer 를 생성한다.
+#   assets/models/adr_racer/model.sdf 와 assets/px4/airframes/4030_gz_adr_racer 를 생성한다.
 # 값을 바꾸면 스크립트를 다시 돌려 두 파일을 함께 갱신할 것.
 #
 # 참고 스펙(통상적인 5인치 프리스타일/레이싱 쿼드, 4S~6S):

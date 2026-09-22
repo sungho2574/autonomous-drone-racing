@@ -3,11 +3,11 @@
 전방 카메라로 게이트를 인식해 통과하는 자율 드론 레이싱 검증용 ROS 2 워크스페이스.
 시뮬(PX4 SITL + Gazebo Harmonic)에서 단계별로 검증한 뒤 250급 레이싱 기체 + 모션캡처로 실기체 검증한다.
 
-| | step 1 (현재) | step 2 | step 3 |
-|---|---|---|---|
-| 게이트 인식 | (x) 맵 사용 | (x) | Gatenet |
-| 위치 추정 | motion capture | motion capture | OpenVINS + gate map PnP |
-| 경로 계획 및 제어 | min-snap + PX4 Position Control | RL + rate controller | RL + rate controller |
+|                   | step 1 (현재)                   | step 2               | step 3                  |
+| ----------------- | ------------------------------- | -------------------- | ----------------------- |
+| 게이트 인식       | (x) 맵 사용                     | (x)                  | Gatenet                 |
+| 위치 추정         | motion capture                  | motion capture       | OpenVINS + gate map PnP |
+| 경로 계획 및 제어 | min-snap + PX4 Position Control | RL + rate controller | RL + rate controller    |
 
 ## 구성
 
@@ -15,13 +15,13 @@
 autonomous-drone-racing/
 ├── docs/step1_architecture.md    # 기술 문서 (설계·좌표계·설치·실행·트러블슈팅)
 └── adr_ws/src/
-    ├── adr_interfaces/           # msg: PolynomialTrajectory, GateArray
-    ├── adr_sim/                  # gz 모델(게이트·레이싱 드론)·월드·PX4 airframe·실행 스크립트
+    ├── adr_msgs/                 # msg: PolynomialTrajectory, GateDetectionArray(2D), GateArray(3D)
+    ├── adr_sim/                  # 시뮬 일괄 launch(gz+PX4+Agent+rviz), assets/{models,worlds,px4}
     ├── adr_video/                # 카메라 입력 (sim: ros_gz_bridge / 실기체: 드라이버 relay)
-    ├── adr_perception/           # 게이트 인식 (step1: stub)
+    ├── adr_perception/           # 게이트 인식 (주황 HSV 기반 2D 검출; step3: Gatenet + PnP)
     ├── adr_planning/             # min-snap 궤적 생성
     ├── adr_control/              # PX4 offboard 제어 (step1: position control)
-    ├── adr_bringup/              # 통합 launch, 게이트 맵(gates.yaml), rviz, mocap 브릿지
+    ├── adr_bringup/              # 미션 launch(step1), 게이트 맵(gates.yaml), rviz 노드, mocap 브릿지
     ├── px4_msgs/                 # submodule (release/1.16)
     └── motion_capture_tracking/  # submodule (Qualisys 등 mocap → /poses, TF)
 ```
@@ -66,53 +66,45 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-PX4 쪽 준비(airframe 등록 후 재빌드, 최초 1회):
+PX4 는 `make px4_sitl` 만 끝나 있으면 된다(airframe 은 실행 시 자동 주입, PX4 소스 수정·재빌드 불필요):
 
 ```bash
-export PX4_DIR=~/PX4-Autopilot      # 클론 위치가 다르면 그 경로로
-$PX4_DIR/../autonomous-drone-racing/adr_ws/src/adr_sim/scripts/install_px4_assets.sh
+export PX4_DIR=~/PX4-Autopilot      # 클론 위치가 다르면 그 경로로. 기본값이면 생략 가능
 (cd $PX4_DIR && make px4_sitl)
 ```
 
-## 실행 (시뮬, 터미널 4개)
+## 실행 (시뮬, 터미널 2개)
 
-모든 터미널에서 먼저:
+두 터미널 모두 먼저:
 
 ```bash
-source /opt/ros/humble/setup.bash
-source ~/ros_gz_harmonic_ws/install/setup.bash          # apt 의 Fortress 판보다 먼저
-source adr_ws/install/setup.bash
-source adr_ws/src/adr_sim/scripts/setup_env.sh          # PX4_DIR / gz 리소스 경로 / GL 설정
+source /opt/ros/humble/setup.bash && source ~/ros_gz_harmonic_ws/install/setup.bash && source ~/autonomous-drone-racing/adr_ws/install/setup.bash
 ```
 
 ```bash
-# T1 — gz 월드 + 브릿지 + rviz
-ros2 launch adr_bringup sim.launch.py
+# T1 — gz 월드 + MicroXRCEAgent + PX4 SITL + 브릿지 + rviz 를 한 번에
+ros2 launch adr_sim sim.launch.py
 ```
 
 ```bash
-# T2 — DDS 에이전트
-MicroXRCEAgent udp4 -p 8888
-```
-
-```bash
-# T3 — PX4 SITL (adr_racer 모델에 attach). --ev 면 GPS 대신 진실값(mocap 에뮬레이션)
-adr_ws/src/adr_sim/scripts/run_px4_sitl.sh
-```
-
-```bash
-# T4 — min-snap 계획 + position control (자동 arm → 이륙 → 2바퀴 → 착륙)
+# T2 — min-snap 계획 + position control (자동 arm → 이륙 → 2바퀴 → 착륙)
 ros2 launch adr_bringup step1.launch.py laps:=2 time_scale:=1.0
 ```
 
+`sim.launch.py` 옵션: `ev:=false`(진실값 주입 대신 GPS 시뮬, airframe 4030 — 이때 T2 에 `origin_mode:=start` 필요) · `gui:=false`(headless) · `rviz:=false` · `soft_gl:=0`(GPU 있는 머신) · `agent:=micro-xrce-dds-agent`(snap 설치본) · `px4_dir:=...`
+
+PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙는다: `~/PX4-Autopilot/build/px4_sitl_default/bin/px4-commander check`, `px4-param set MPC_XY_VEL_MAX 5`.
+
 ## 자주 막히는 곳
 
-| 증상 | 원인 / 조치 |
-|---|---|
-| `colcon build` 가 px4_msgs 에서 실패 | submodule 미초기화. `git submodule update --init --recursive` |
-| 노드는 뜨는데 arm/offboard 로 안 넘어감 | `/fmu/out/*` 미수신. px4_msgs 와 PX4 버전이 맞는지 확인. 토픽 이름에 `_v4`/`_v1` 같은 접미사가 붙으므로 `ros2 topic list \| grep fmu` 로 실제 이름을 볼 것 |
-| gz 가 `Ogre::UnimplementedException` 으로 abort | GPU 없는 VM. `setup_env.sh` 가 `ADR_SOFT_GL=1` 로 llvmpipe 를 강제한다 |
-| gz 가 `ign gazebo --force-version 6` 으로 뜸 | apt 의 Fortress 용 ros_gz 가 잡힘. Harmonic 워크스페이스를 먼저 source |
-| `Unknown message type [9]` | 위와 동일 (브릿지가 Fortress 판) |
+| 증상                                            | 원인 / 조치                                                                                                                                                |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `colcon build` 가 px4_msgs 에서 실패            | submodule 미초기화. `git submodule update --init --recursive`                                                                                              |
+| 노드는 뜨는데 arm/offboard 로 안 넘어감         | `/fmu/out/*` 미수신. px4_msgs 와 PX4 버전이 맞는지 확인. 토픽 이름에 `_v4`/`_v1` 같은 접미사가 붙으므로 `ros2 topic list \| grep fmu` 로 실제 이름을 볼 것 |
+| gz 가 `Ogre::UnimplementedException` 으로 abort | GPU 없는 VM. `sim.launch.py` 기본값 `soft_gl:=1` 이 llvmpipe 를 강제한다. GPU 있으면 `soft_gl:=0`                                                          |
+| gz 가 `ign gazebo --force-version 6` 으로 뜸    | apt 의 Fortress 용 ros_gz 가 잡힘. Harmonic 워크스페이스를 먼저 source                                                                                     |
+| `Unknown message type [9]`                      | 위와 동일 (브릿지가 Fortress 판)                                                                                                                           |
+| PX4 가 `no autostart file found (…/4030_*)`     | `px4_dir` 가 잘못됐거나 `make px4_sitl` 미완료. launch 로그의 `[px4] … airframes→` 줄 확인                                                                 |
+| PX4 가 `waiting for gz world` 에서 60 s 후 종료 | gz 서버가 안 떴거나 월드 이름 불일치. T1 로그 앞부분의 gz 에러 확인                                                                                        |
 
 자세한 내용은 [docs/step1_architecture.md](docs/step1_architecture.md).

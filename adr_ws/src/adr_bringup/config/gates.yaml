@@ -9,13 +9,13 @@
 #          → 통과 방향 = (cos(yaw), sin(yaw)).
 #          ⚠️ crazyflie 레포 gates.yaml 은 CW 관례였음 — 여기서는 ROS 표준(CCW)을 따른다.
 course:
-  radius: 4.0          # 게이트 중심이 놓인 원의 반지름
-  height: 1.5          # 게이트 중심 높이
-  direction: ccw       # 비행 방향(위에서 봤을 때)
+  radius: 4.0 # 게이트 중심이 놓인 원의 반지름
+  height: 1.5 # 게이트 중심 높이
+  direction: ccw # 비행 방향(위에서 봤을 때)
 gate:
-  inner_size: 1.5      # 개구부 한 변
-  outer_size: 2.1      # 프레임 바깥 한 변 (→ 프레임 폭 0.3)
-  thickness: 0.1       # 프레임 두께(통과 방향)
+  inner_size: 1.5 # 개구부 한 변
+  outer_size: 2.1 # 프레임 바깥 한 변 (→ 프레임 폭 0.3)
+  thickness: 0.05 # 프레임 두께(통과 방향)
 # 이륙 지점(바닥). 게이트1 앞 원호 위 — 이륙 후 takeoff_z 로 호버한 뒤 코스를 시작한다.
 # 시뮬 월드의 adr_racer 스폰 위치도 gen_world.py 가 여기서 가져간다.
 start:
@@ -23,7 +23,7 @@ start:
   y: -2.83
   takeoff_z: 1.5
 gates:
-  - {id: 1, x:  4.0, y:  0.0, z: 1.5, yaw_deg:  90}
-  - {id: 2, x:  0.0, y:  4.0, z: 1.5, yaw_deg: 180}
-  - {id: 3, x: -4.0, y:  0.0, z: 1.5, yaw_deg: 270}
-  - {id: 4, x:  0.0, y: -4.0, z: 1.5, yaw_deg:   0}
+  - { id: 1, x: 4.0, y: 0.0, z: 1.5, yaw_deg: 90 }
+  - { id: 2, x: 0.0, y: 4.0, z: 1.5, yaw_deg: 180 }
+  - { id: 3, x: -4.0, y: 0.0, z: 1.5, yaw_deg: 270 }
+  - { id: 4, x: 0.0, y: -4.0, z: 1.5, yaw_deg: 0 }

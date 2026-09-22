@@ -4,7 +4,7 @@
 # @type Quadrotor
 #
 # 자동 생성: adr_sim/scripts/gen_racer_model.py (스펙: config/racer_spec.yaml). 직접 수정하지 말 것.
-# 설치: adr_sim/scripts/install_px4_assets.sh 가 PX4 ROMFS airframes 에 링크·등록한다.
+# 설치: adr_sim/launch/sim.launch.py 가 실행 때마다 PX4 build/px4_sitl_default/etc/init.d-posix/airframes/ 에 복사한다.
 
 . ${R}etc/init.d/rc.mc_defaults
 

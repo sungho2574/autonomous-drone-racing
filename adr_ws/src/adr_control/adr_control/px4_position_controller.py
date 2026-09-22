@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import numpy as np
-from adr_interfaces.msg import PolynomialTrajectory
+from adr_msgs.msg import PolynomialTrajectory
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
 
@@ -100,8 +100,10 @@ class PositionController(OffboardBase):
                         f'waiting: traj={self.traj is not None} pos={self.position_valid} '
                         f'status={self.status_received}')
                 return
+            # map↔PX4 local 원점 offset 확정 (정지 상태, 이륙 전). 이후 위치/세트포인트는 map 기준
+            self.fix_origin()
             # 이륙 전 hold 목표 = 현재 위치(바닥). yaw 는 궤적 시작 yaw
-            self._hold_p = self.position_enu.copy()
+            self._hold_p = self.position_world.copy()
             self._hold_yaw = self.traj.sample(0.0)[3]
             self._warm = 0
             self._goto('WARMUP')
@@ -127,7 +129,7 @@ class PositionController(OffboardBase):
 
         elif s == 'TAKEOFF':
             self._hold()
-            err = np.linalg.norm(self.position_enu - self._hold_p)
+            err = np.linalg.norm(self.position_world - self._hold_p)
             spd = np.linalg.norm(self.velocity_enu)
             if (err < self.pos_tol and spd < self.vel_tol) or self._t_state > self.takeoff_timeout:
                 if self._t_state > self.takeoff_timeout:

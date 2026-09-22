@@ -5,13 +5,23 @@ arm / offboard 전환 / 상태 구독 / 세트포인트 발행처럼 컨트롤�
 - step2: RL rate controller 는 같은 베이스를 상속해 VehicleRatesSetpoint 를 발행하면 된다.
 
 프레임 규약: 이 베이스의 public API 는 전부 ENU(map)/FLU 이고, PX4 경계에서만 NED/FRD 로 바꾼다.
+
+map(월드) 원점 vs PX4 local 원점 (origin_mode 파라미터)
+  - 'world' : PX4 local 프레임 == map. 외부 위치(EV: sim 진실값 / 실기체 mocap)로 EKF2 를 돌릴 때.
+  - 'start' : PX4 local 원점 = 기체가 부팅한 자리(GPS 시뮬 모드). 기체가 gates.yaml 의 start 에
+              놓여 있다고 보고, 이륙 전 정지 상태에서 offset = start − p_local 을 한 번 재서
+              이후 모든 세트포인트/위치를 보정한다. 결과 offset 은 /adr/local_origin 으로 latched 발행
+              → px4_odom_to_tf 가 같은 값으로 TF 를 보정한다.
 """
 from __future__ import annotations
 
+import os
 from math import isnan
 
 import numpy as np
 import rclpy
+from ament_index_python.packages import get_package_share_directory
+from geometry_msgs.msg import PointStamped
 from px4_msgs.msg import (OffboardControlMode, TrajectorySetpoint, VehicleCommand,
                           VehicleLocalPosition, VehicleStatus)
 from rclpy.node import Node
@@ -26,6 +36,8 @@ PX4_SUB_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
 PX4_PUB_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
                          durability=DurabilityPolicy.VOLATILE,
                          history=HistoryPolicy.KEEP_LAST, depth=10)
+LATCHED_QOS = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                         durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 
 def px4_topic(base: str, msg_type) -> str:
@@ -46,8 +58,13 @@ class OffboardBase(Node):
         self.declare_parameter('warmup_count', 20)     # offboard 전환 전 미리 보낼 세트포인트 수(≥10 권장)
         self.declare_parameter('auto_arm', True)
         self.declare_parameter('fmu_ns', '')          # PX4_UXRCE_DDS_NS 를 쓰면 '/<ns>'
+        self.declare_parameter('origin_mode', 'world')  # 'world' | 'start' (모듈 docstring 참고)
+        self.declare_parameter('gates_file', '')        # origin_mode=start 일 때 start 를 읽을 yaml
 
         ns = self.get_parameter('fmu_ns').value
+        self.origin_mode = self.get_parameter('origin_mode').value
+        self.origin = np.zeros(3)     # map = local + origin  (ENU)
+        self._origin_pub = self.create_publisher(PointStamped, '/adr/local_origin', LATCHED_QOS)
         self.rate_hz = float(self.get_parameter('rate_hz').value)
         self.warmup_count = int(self.get_parameter('warmup_count').value)
         self.auto_arm = bool(self.get_parameter('auto_arm').value)
@@ -80,7 +97,31 @@ class OffboardBase(Node):
 
     @property
     def position_enu(self) -> np.ndarray:
+        """PX4 local 프레임 위치 (ENU)."""
         return F.ned_to_enu([self._lpos.x, self._lpos.y, self._lpos.z])
+
+    @property
+    def position_world(self) -> np.ndarray:
+        """map(월드) 프레임 위치 = local + origin."""
+        return self.position_enu + self.origin
+
+    def fix_origin(self):
+        """이륙 전 정지 상태에서 호출. origin_mode 에 따라 map↔local offset 을 정하고 발행한다."""
+        if self.origin_mode == 'start':
+            gates_file = self.get_parameter('gates_file').value or os.path.join(
+                get_package_share_directory('adr_bringup'), 'config', 'gates.yaml')
+            from adr_planning.course import load_course
+            start = load_course(gates_file).start
+            ground = np.array([start[0], start[1], 0.0])       # 이륙 전 = 바닥
+            self.origin = ground - self.position_enu
+        elif self.origin_mode != 'world':
+            raise ValueError(f"origin_mode 는 'world' 또는 'start': {self.origin_mode}")
+        msg = PointStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        msg.point.x, msg.point.y, msg.point.z = map(float, self.origin)
+        self._origin_pub.publish(msg)
+        self.get_logger().info(f'origin_mode={self.origin_mode}: map = local + {np.round(self.origin, 3)}')
 
     @property
     def velocity_enu(self) -> np.ndarray:
@@ -114,13 +155,14 @@ class OffboardBase(Node):
         m.attitude, m.body_rate = attitude, body_rate
         self._mode_pub.publish(m)
 
-    def publish_trajectory_setpoint(self, p_enu, v_enu=None, a_enu=None,
+    def publish_trajectory_setpoint(self, p_world, v_enu=None, a_enu=None,
                                     yaw_enu: float = float('nan'), yaw_rate_enu: float = float('nan')):
-        """ENU 입력 → NED TrajectorySetpoint. None/NaN 은 '제어 안 함'."""
+        """map(ENU) 입력 → PX4 local NED TrajectorySetpoint. None/NaN 은 '제어 안 함'."""
         sp = TrajectorySetpoint()
         sp.timestamp = self._now_us()
         nan3 = [float('nan')] * 3
-        sp.position = [float(x) for x in F.enu_to_ned(p_enu)] if p_enu is not None else nan3
+        p_local = np.asarray(p_world, dtype=float) - self.origin if p_world is not None else None
+        sp.position = [float(x) for x in F.enu_to_ned(p_local)] if p_local is not None else nan3
         sp.velocity = [float(x) for x in F.enu_to_ned(v_enu)] if v_enu is not None else nan3
         sp.acceleration = [float(x) for x in F.enu_to_ned(a_enu)] if a_enu is not None else nan3
         sp.jerk = nan3
