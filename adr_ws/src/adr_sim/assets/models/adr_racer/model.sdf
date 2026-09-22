@@ -207,7 +207,8 @@
             <uri>model://adr_racer/meshes/1345_prop_ccw.stl</uri>
           </mesh>
         </geometry>
-        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+        <!-- 검정: 주황 계열이면 게이트와 같은 HSV 대역이라 gate_detector 에 프롭이 잡힌다 -->
+        <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.1 0.1 0.1 1</specular></material>
       </visual>
       <collision name="rotor_0_collision">
         <pose>0 0 0 0 0 0</pose>
@@ -240,7 +241,8 @@
             <uri>model://adr_racer/meshes/1345_prop_ccw.stl</uri>
           </mesh>
         </geometry>
-        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+        <!-- 검정: 주황 계열이면 게이트와 같은 HSV 대역이라 gate_detector 에 프롭이 잡힌다 -->
+        <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.1 0.1 0.1 1</specular></material>
       </visual>
       <collision name="rotor_1_collision">
         <pose>0 0 0 0 0 0</pose>
@@ -273,7 +275,8 @@
             <uri>model://adr_racer/meshes/1345_prop_cw.stl</uri>
           </mesh>
         </geometry>
-        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+        <!-- 검정: 주황 계열이면 게이트와 같은 HSV 대역이라 gate_detector 에 프롭이 잡힌다 -->
+        <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.1 0.1 0.1 1</specular></material>
       </visual>
       <collision name="rotor_2_collision">
         <pose>0 0 0 0 0 0</pose>
@@ -306,7 +309,8 @@
             <uri>model://adr_racer/meshes/1345_prop_cw.stl</uri>
           </mesh>
         </geometry>
-        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+        <!-- 검정: 주황 계열이면 게이트와 같은 HSV 대역이라 gate_detector 에 프롭이 잡힌다 -->
+        <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.1 0.1 0.1 1</specular></material>
       </visual>
       <collision name="rotor_3_collision">
         <pose>0 0 0 0 0 0</pose>

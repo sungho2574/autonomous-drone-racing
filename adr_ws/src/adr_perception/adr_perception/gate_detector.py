@@ -21,6 +21,23 @@ from sensor_msgs.msg import Image
 SENSOR_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
 
 
+def bgr8_to_imgmsg(bgr: np.ndarray, header) -> Image:
+    """CvBridge.cv2_to_imgmsg(encoding='bgr8') 대체.
+
+    cv_bridge 의 인코딩 경로는 파이썬 cv2 의 CV_8UC3 상수와 OpenCV 4 로 빌드된 C++ 확장의 값을
+    같이 쓴다. OpenCV 5 를 pip 로 깔면 상수가 16→64 로 바뀌어 KeyError 로 죽는다(읽기 경로는 멀쩡).
+    bgr8 은 그냥 행 우선 바이트라 직접 채우는 편이 버전에 안 휘둘린다.
+    """
+    msg = Image()
+    msg.header = header
+    msg.height, msg.width = bgr.shape[0], bgr.shape[1]
+    msg.encoding = 'bgr8'
+    msg.is_bigendian = 0
+    msg.step = bgr.shape[1] * 3
+    msg.data = np.ascontiguousarray(bgr, dtype=np.uint8).tobytes()
+    return msg
+
+
 class GateDetector(Node):
     def __init__(self):
         super().__init__('gate_detector')
@@ -119,9 +136,7 @@ class GateDetector(Node):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
             cx, cy = msg.width // 2, msg.height // 2
             cv2.drawMarker(vis, (cx, cy), (255, 255, 255), cv2.MARKER_CROSS, 16, 1)
-            out = self.bridge.cv2_to_imgmsg(vis, encoding='bgr8')
-            out.header = msg.header
-            self.debug_pub.publish(out)
+            self.debug_pub.publish(bgr8_to_imgmsg(vis, msg.header))
 
         if self.n % 300 == 1:
             self.get_logger().info(f'{msg.width}x{msg.height} frames={self.n} gates={len(dets)}')

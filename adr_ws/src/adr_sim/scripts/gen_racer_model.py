@@ -69,7 +69,8 @@ def gen_sdf(s):
             <uri>model://{s['name']}/meshes/1345_prop_{d}.stl</uri>
           </mesh>
         </geometry>
-        <material><ambient>0.9 0.3 0.05 1</ambient><diffuse>0.9 0.3 0.05 1</diffuse></material>
+        <!-- 검정: 주황 계열이면 게이트와 같은 HSV 대역이라 gate_detector 에 프롭이 잡힌다 -->
+        <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse><specular>0.1 0.1 0.1 1</specular></material>
       </visual>
       <collision name="rotor_{i}_collision">
         <pose>0 0 0 0 0 0</pose>
@@ -260,6 +261,17 @@ param set-default MPC_TILTMAX_AIR 60
 param set-default MC_PITCHRATE_MAX 800
 param set-default MC_ROLLRATE_MAX 800
 param set-default MC_YAWRATE_MAX 400
+
+# ---- rate 루프 게인 ----
+# rc.mc_defaults 의 P=0.15/D=0.003 은 x500 급(~1.5 kg) 기준이다. 이 기체는 관성 2.5e-3 에
+# 모터 토크가 커서 각가속도 권한이 훨씬 크고, 그 게인이면 피치축이 리밋사이클에 빠진다
+# (호버 정지 상태에서 피치 각속도 p90 0.45 rad/s, 모터가 1673/300 으로 포화).
+# SITL 측정: P=0.15 에서 D=0.002 도 발진, D=0.0008 이면 정상. P<=0.12 면 D=0.0024 까지 정상.
+# 발진 시작점 P=0.15 의 절반을 취함. 게인을 바꾸면 호버 각속도 p90 부터 확인할 것.
+param set-default MC_ROLLRATE_P {fmt(p['rollrate_p'])}
+param set-default MC_PITCHRATE_P {fmt(p['pitchrate_p'])}
+param set-default MC_ROLLRATE_D {fmt(p['rollrate_d'])}
+param set-default MC_PITCHRATE_D {fmt(p['pitchrate_d'])}
 
 # ---- GCS(QGC)/RC 없이 offboard 만으로 운용 ----
 param set-default COM_RC_IN_MODE 4     # 스틱 입력 비활성 (SITL 기본 1 = joystick only → manual control lost 실패안전 유발)

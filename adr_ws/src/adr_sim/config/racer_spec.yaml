@@ -43,8 +43,17 @@ px4:
   xy_vel_max: 10.0
   z_vel_max_up: 5.0
   z_vel_max_dn: 3.0
-  acc_hor: 8.0
+  # ⚠️ acc_hor/jerk_auto 는 planner.yaml 의 궤적 peak 보다 충분히 위여야 한다.
+  # 같거나 낮으면 PX4 가 포화돼 첫 선회에서 코너를 자르고 게이트 프레임을 친다.
+  # 현재 코스(v_avg 3.0, a_max 8.0) 계획 peak: 수평가속 7.10 m/s^2, 수평저크 27.1 m/s^3
+  acc_hor: 14.0
   acc_up_max: 8.0
   acc_down_max: 6.0
-  jerk_auto: 20.0
+  jerk_auto: 30.0
   yawrate_max: 200.0          # MPC_YAWRAUTO_MAX [deg/s]
+  # rate 루프 게인. PX4 기본(0.15 / 0.003)은 이 기체엔 과해서 피치 리밋사이클이 생긴다.
+  # SITL 에서 발진 시작점이 P=0.15 라 그 절반을 쓴다. 자세한 근거는 gen_racer_model.py 주석.
+  rollrate_p: 0.08
+  pitchrate_p: 0.08
+  rollrate_d: 0.0016
+  pitchrate_d: 0.0016

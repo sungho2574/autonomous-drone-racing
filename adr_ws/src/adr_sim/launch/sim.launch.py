@@ -19,10 +19,13 @@
 PX4 기동 방식 (ARMS 의 px4_sitl.launch.py 와 같은 패턴, 셸 스크립트 없음)
   - assets/px4/airframes/* 를 매번 $PX4_DIR/build/px4_sitl_default/etc/init.d-posix/airframes/ 에 복사
     → PX4 소스(ROMFS) 수정·재빌드 불필요. make px4_sitl 이 etc 를 다시 만들어도 다음 실행에 다시 들어간다.
-  - 남아 있는 px4 프로세스 정리 후, gz 는 ros_gz_sim 이 띄우고 PX4 는 standalone 으로 붙는다
+  - 이전 실행 잔재(gz·PX4·브릿지)를 먼저 정리한 뒤, gz 는 ros_gz_sim 이 띄우고 PX4 는 standalone 으로 붙는다
     (PX4_GZ_STANDALONE=1, PX4_GZ_MODEL_NAME=adr_racer). 월드 clock 토픽이 보일 때까지 기다린 뒤 실행.
   - -d 데몬 모드라 pxh 셸이 없다. 명령은 build/px4_sitl_default/bin/px4-commander, px4-param 등 클라이언트로.
-  - Ctrl+C 시 px4 도 같이 정리.
+  - Ctrl+C 시에도 같은 목록을 정리한다. gz 래퍼가 죽어도 'gz sim server' 는 살아남아 월드 이름을
+    계속 점유하고, 그러면 다음 실행이 /gazebo/starting_world 에서 멈춰 "가제보가 안 켜진다".
+    주의: gz server/gui 는 cmdline 에 월드 이름이 없어 스코프를 못 좁힌다 → 다른 gz 도 같이 죽는다.
+    (자세한 내용은 _stale_patterns 주석)
 """
 import os
 import shutil
@@ -43,12 +46,61 @@ from launch_ros.actions import Node
 SIM_SHARE = Path(get_package_share_directory('adr_sim'))
 ASSETS = SIM_SHARE / 'assets'
 MODEL_NAME = 'adr_racer'          # worlds/*.sdf 의 <include><name> 과 동일
+AGENT_PORT = '8888'               # uXRCE-DDS. 에이전트 실행과 잔재 정리 패턴이 같이 쓴다
 AIRFRAME = {'false': 4030, 'true': 4031}
 
 
-def _kill_stale_px4():
-    subprocess.run(['pkill', '-9', '-f', 'px4_sitl_default/bin/px4'],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def _stale_patterns(world: str):
+    """(pkill -f 패턴, 설명). 앞에서부터 순서대로 죽인다.
+
+    gz sim 은 래퍼(`gz sim -r <world>`) 가 `gz sim server` / `gz sim gui` 를 자식으로 띄우는데,
+    래퍼가 비정상 종료해도 **서버는 살아남아 월드 이름을 계속 점유한다**. 그 상태로 다시 띄우면
+    새 서버가 /gazebo/starting_world 에서 멈추고 /world/<world>/clock 이 안 올라와,
+    겉보기엔 "가제보가 안 켜지는" 것처럼 보인다. → 기동 전·종료 시 모두 정리한다.
+
+    `gz sim server` / `gz sim gui` 는 cmdline 에 월드 이름이 없어 스코프를 좁힐 수 없다.
+    즉 **다른 프로젝트의 gz sim 도 같이 죽는다**. 이 워크스페이스는 한 번에 월드 하나만 쓰는
+    전제라 그대로 두지만, 다른 gz 를 띄워 두고 작업한다면 이 목록에서 빼야 한다.
+    나머지는 월드 이름이나 이 레포 경로로 스코프를 좁혀 둔다.
+    """
+    return [
+        # PX4: -d 데몬이 락을 쥔 채 남으면 다음 기동이 'PX4 server already running' 으로 막힌다.
+        # launch 가 cwd=build 로 띄우므로 실제 cmdline 은 상대경로(`./bin/px4 -d ...`) 다.
+        # 절대경로 패턴만 두면 안 잡히므로 둘 다 본다.
+        (r'px4_sitl_default/bin/px4', 'PX4 (절대경로)'),
+        (r'bin/px4 -d', 'PX4 (상대경로 데몬)'),
+        (r'gz sim server', 'gz 서버'),
+        (r'gz sim gui', 'gz GUI'),
+        (rf'gz sim .*{world}', f'gz 래퍼 ({world})'),
+        # 낡은 에이전트가 포트를 쥐고 있으면 새 에이전트가 bind error(errno 98)로 즉사하고,
+        # /fmu/out/* 이 안 올라와 컨트롤러가 'pos=False status=False' 로 영영 대기한다.
+        # 실행 파일 이름은 설치 방식에 따라 다르므로(MicroXRCEAgent / micro-xrce-dds-agent) 포트로 잡는다.
+        (rf'udp4 -p {AGENT_PORT}', f'uXRCE-DDS 에이전트 (포트 {AGENT_PORT})'),
+        (r'parameter_bridge.*__node:=gz_bridge', 'ros_gz_bridge'),
+        (r'adr_bringup/gate_markers', 'gate_markers'),
+        (r'adr_bringup/px4_odom_to_tf', 'px4_odom_to_tf'),
+        (r'rviz2.*adr\.rviz', 'rviz2'),
+    ]
+
+
+def _kill_stale(world: str) -> list:
+    """이전 실행의 잔재를 정리하고, 실제로 죽인 것들의 설명을 돌려준다."""
+    killed = []
+    for pattern, desc in _stale_patterns(world):
+        r = subprocess.run(['pkill', '-9', '-f', pattern],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode == 0:        # 0 = 하나 이상 매칭해서 죽였음
+            killed.append(desc)
+    return killed
+
+
+def _cleanup(context, *args, **kwargs):
+    """다른 무엇보다 **먼저** 실행돼야 한다 — 우리 gz 가 뜬 뒤에 돌면 그걸 죽인다."""
+    world = LaunchConfiguration('world').perform(context)
+    killed = _kill_stale(world)
+    if killed:
+        return [LogInfo(msg=f'[cleanup] 이전 실행 잔재 정리: {", ".join(killed)}')]
+    return []
 
 
 def _px4(context, *args, **kwargs):
@@ -68,9 +120,12 @@ def _px4(context, *args, **kwargs):
     af_dst.mkdir(parents=True, exist_ok=True)
     airframes = sorted((ASSETS / 'px4' / 'airframes').iterdir())
     for f in airframes:
-        shutil.copy2(f, af_dst / f.name)
+        dst = af_dst / f.name
+        dst.unlink(missing_ok=True)   # 예전에 걸어둔 심링크가 남아 있으면 copy2 가 링크를 따라가 실패한다
+        shutil.copy2(f, dst)
 
-    _kill_stale_px4()
+    # 잔재 정리는 _cleanup 이 이 launch 의 맨 앞에서 이미 끝냈다. 여기서 또 부르면
+    # 그 사이에 뜬 우리 gz 를 죽이게 된다.
 
     env = dict(os.environ)
     env.update({
@@ -79,7 +134,7 @@ def _px4(context, *args, **kwargs):
         'PX4_GZ_WORLD': world,
         'PX4_SYS_AUTOSTART': str(autostart),
         'PX4_SIM_MODEL': f'gz_{MODEL_NAME}',
-        'PX4_UXRCE_DDS_PORT': os.environ.get('PX4_UXRCE_DDS_PORT', '8888'),
+        'PX4_UXRCE_DDS_PORT': os.environ.get('PX4_UXRCE_DDS_PORT', AGENT_PORT),
     })
     # gz 월드가 뜰 때까지 기다린 뒤 PX4 실행 (gz 와 동시에 시작되므로)
     wait_then_run = (
@@ -118,6 +173,9 @@ def generate_launch_description():
         DeclareLaunchArgument('agent', default_value='MicroXRCEAgent'),
         DeclareLaunchArgument('soft_gl', default_value=EnvironmentVariable('ADR_SOFT_GL', default_value='1')),
 
+        # ---- 이전 실행 잔재 정리 (gz·PX4·브릿지). 반드시 gz 를 띄우기 전에! ----
+        OpaqueFunction(function=_cleanup),
+
         # ---- 환경: 모델 검색 경로, 소프트웨어 GL ----
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', str(ASSETS / 'models')),
         SetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE', '1',
@@ -136,11 +194,14 @@ def generate_launch_description():
             condition=UnlessCondition(gui)),
 
         # ---- uXRCE-DDS 에이전트 ----
-        ExecuteProcess(cmd=[agent, 'udp4', '-p', '8888'], name='xrce_agent', output='screen'),
+        ExecuteProcess(cmd=[agent, 'udp4', '-p', AGENT_PORT], name='xrce_agent', output='screen'),
 
         # ---- PX4 SITL ----
         OpaqueFunction(function=_px4),
-        RegisterEventHandler(OnShutdown(on_shutdown=lambda event, context: _kill_stale_px4())),
+        # Ctrl+C 시에도 정리. gz 래퍼가 먼저 죽으면 'gz sim server' 가 고아로 남아
+        # 다음 실행을 막으므로, 종료 경로에서도 같은 목록을 쓸어 준다.
+        RegisterEventHandler(OnShutdown(on_shutdown=lambda event, context: _kill_stale(
+            LaunchConfiguration('world').perform(context)))),
 
         # ---- gz ↔ ROS 브릿지 (clock, 카메라, 진실값) ----
         Node(package='ros_gz_bridge', executable='parameter_bridge', name='gz_bridge',
