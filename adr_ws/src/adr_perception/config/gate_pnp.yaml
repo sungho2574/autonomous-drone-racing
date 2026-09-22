@@ -1,0 +1,15 @@
+gate_pnp:
+  ros__parameters:
+    gates_file: ""                  # 비우면 adr_bringup/config/gates.yaml
+    frame_id: map
+    max_marks: 2000                 # /adr/pnp/marks 에 쌓아 둘 X 표시 개수
+    mark_size: 0.12                 # X 한 변 [m]
+    camera_info_topic: /adr/camera/camera_info
+    odom_topic: /adr/odom           # 대상 게이트 인덱스 상태기계에만 쓴다 (포즈 추정에는 미사용)
+    # camera_link 의 base_link 기준 장착. adr_sim/config/racer_spec.yaml 의 camera 절과 같아야 한다.
+    # 실기체에서는 실제 장착값으로 바꿀 것.
+    cam_xyz: [0.045, 0.0, 0.022]
+    cam_tilt_deg: 20.0              # 위쪽 틸트. 이 값이 틀리면 추정 위치가 통째로 기운다
+    max_reproj_px: 3.0              # 재투영오차 상한 [px]
+    max_odom_gap: 5.0               # 오도메트리와 이만큼 넘게 벌어지면 다른 게이트를 본 것으로 보고 기각 [m].
+                                    # PnP 자체 오차(수십 cm)보다 훨씬 크게 둬서 성능 측정을 왜곡하지 않는다. 0 이면 끔

@@ -28,7 +28,9 @@ camera:
   height: 480
   hfov: 1.5708                # [rad] 90°
   rate: 30                    # [Hz]
-  tilt_deg: 30                # 상향 틸트 (레이싱 카메라 각도)
+  tilt_deg: 20                # 상향 틸트 (레이싱 카메라 각도).
+                              # 바꾸면 adr_perception/config/gate_pnp.yaml 의 cam_tilt_deg 와
+                              # test_pnp.py 의 CAM_TILT 도 같이 맞출 것 — 틀리면 PnP 결과가 통째로 기운다
   pose_xyz: [0.045, 0.0, 0.022]  # base_link 기준 [m]. frame.stl 의 카메라 마운트 위치
   topic: adr_racer/camera     # gz 토픽 (ros_gz_bridge 가 /adr/camera/image_raw 로 브릿지)
 frame_mesh:                   # 외관. 키를 지우면 박스 placeholder 로 생성

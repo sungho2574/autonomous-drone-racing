@@ -1,7 +1,7 @@
-"""step1 파이프라인: gate_planner(min-snap) + px4_position_controller (+ perception stub).
+"""step1 파이프라인: gate_planner(min-snap) + px4_position_controller (+ perception, PnP 시각화).
 
 선행: ros2 launch adr_sim sim.launch.py (gz+PX4+Agent+rviz 일괄) 또는 real.launch.py
-인자: laps:=2  time_scale:=1.0  land_after:=true  perception:=true  use_sim_time:=true
+인자: laps:=2  time_scale:=1.0  land_after:=true  perception:=true  pnp:=true  use_sim_time:=true
       origin_mode:=world|start  (PX4 local 원점이 map 과 다를 때 = GPS 시뮬 모드(ev:=false) 면 start)
 """
 import os
@@ -25,6 +25,7 @@ def generate_launch_description():
         DeclareLaunchArgument('time_scale', default_value='1.0'),
         DeclareLaunchArgument('land_after', default_value='true'),
         DeclareLaunchArgument('perception', default_value='true'),
+        DeclareLaunchArgument('pnp', default_value='true'),
         DeclareLaunchArgument('origin_mode', default_value='world'),
 
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
@@ -40,5 +41,10 @@ def generate_launch_description():
         Node(package='adr_perception', executable='gate_detector', name='gate_detector',
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_detector.yaml'),
                          sim_time], condition=IfCondition(LaunchConfiguration('perception')),
+             output='screen'),
+        # PnP 위치 추정 — 시각화/평가 전용. 제어에는 절대 안 들어간다 (TF pnp_base_link 로만 나감)
+        Node(package='adr_perception', executable='gate_pnp', name='gate_pnp',
+             parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_pnp.yaml'),
+                         sim_time], condition=IfCondition(LaunchConfiguration('pnp')),
              output='screen'),
     ])

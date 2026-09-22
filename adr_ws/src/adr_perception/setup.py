@@ -17,12 +17,13 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    description='게이트 인식 (색상 기반 2D 검출 → GateDetectionArray; step3: Gatenet + PnP)',
+    description='게이트 인식 (색상 기반 2D 검출 + 개구부 코너 → GateDetectionArray, PnP 위치 추정)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'gate_detector = adr_perception.gate_detector:main',
+            'gate_pnp = adr_perception.gate_pnp:main',
         ],
     },
 )

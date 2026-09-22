@@ -10,3 +10,6 @@ float32 h           # bbox 높이 [px]
 float32 area        # 주황색 프레임 픽셀 면적 [px^2]
 bool has_hole       # 개구부(내부 컨투어)가 보였는지 — true 면 통과 가능한 정면 시야
 float32 confidence  # 0~1. 프레임 면적 / bbox 면적 등으로 만든 간이 신뢰도
+bool has_corners    # 개구부 4 꼭짓점을 신뢰할 수 있게 땄는지 (PnP 가능)
+float32[8] corners  # 개구부 꼭짓점 [u0,v0, u1,v1, u2,v2, u3,v3] [px].
+                    # 이미지 기준 시계방향 TL→TR→BR→BL. has_corners=false 면 의미 없음

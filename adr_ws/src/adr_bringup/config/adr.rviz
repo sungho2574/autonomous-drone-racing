@@ -43,6 +43,14 @@ Visualization Manager:
       Topic:
         Value: /adr/flown_path
       Value: true
+    # 게이트 PnP 로 추정한 위치 (계측용, 제어 미반영). 인식된 순간마다 그 자리에 파란 X.
+    # 색은 마커 자체에 들어 있다. 빨간 FlownPath 와 겹쳐 보면 편차가 바로 드러난다.
+    - Class: rviz_default_plugins/Marker
+      Name: PnPMarks
+      Enabled: true
+      Topic:
+        Value: /adr/pnp/marks
+      Value: true
     - Class: rviz_default_plugins/Odometry
       Name: Odom
       Enabled: true
