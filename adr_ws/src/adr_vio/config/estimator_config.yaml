@@ -55,6 +55,12 @@ knn_ratio: 0.70
 track_frequency: 20.0
 downsample_cameras: false
 num_opencv_threads: 2
+# true(업스트림 기본)여도 동작은 한다. false 로 두는 건 취향이 아니라 종료 안정성 때문 —
+# true 면 ROS2Visualizer 생성자가 **detach** 된 스레드를 띄워 while(rclcpp::ok()) 로 20 Hz 씩
+# publish_images() 를 도는데, 이 스레드는 Visualizer 객체보다 오래 살 수 있어 종료 시 이미 파괴된
+# 퍼블리셔를 건드릴 여지가 있다. false 면 영상 콜백 안에서 직접 발행해 그 스레드가 아예 안 생긴다.
+# (디버그 영상은 구독자가 있을 때만 그리므로 평소 비용도 0 이다.)
+multi_threading_pubs: false
 histogram_method: "HISTOGRAM"
 
 up_msckf_sigma_px: 1
@@ -68,3 +74,49 @@ use_mask: false
 
 relative_config_imu: "kalibr_imu_chain.yaml"
 relative_config_imucam: "kalibr_imucam_chain.yaml"
+
+# ---- 아래는 OpenVINS v2.7 이 필수로 요구하는 키들 ----
+# 빠지면 opencv_yaml_parse 가 "the node X of type [..] was not found" 를 찍고
+# parser->successful() 이 false 가 되어 run_subscribe_msckf.cpp:97 에서 std::exit(EXIT_FAILURE) 한다.
+# (그 과정에서 소멸자가 죽은 rclcpp 컨텍스트를 건드려 SIGSEGV 로 보이므로 원인 찾기가 까다롭다.)
+# 값은 전부 OpenVINS 기본값 그대로 — 채워 넣기 전 실효 동작과 동일하다.
+
+# ArUco (안 쓴다)
+use_aruco: false
+num_aruco: 1024
+downsize_aruco: true
+
+# 특징점 삼각측량 (ov_core FeatureInitializerOptions 기본값)
+fi_triangulate_1d: false
+fi_refine_features: true
+fi_max_runs: 5
+fi_init_lamda: 1e-3
+fi_max_lamda: 1e10
+fi_min_dx: 1e-6
+fi_min_dcost: 1e-6
+fi_lam_mult: 10.0
+fi_min_dist: 0.10
+fi_max_dist: 60.0
+fi_max_baseline: 40.0
+fi_max_cond_number: 10000.0
+
+# 동적 초기화 (안 쓴다 — 이 코스는 정지 상태에서 이륙하므로 static init)
+init_dyn_use: false
+init_dyn_mle_opt_calib: false
+init_dyn_mle_max_iter: 50
+init_dyn_mle_max_threads: 6
+init_dyn_mle_max_time: 0.05
+init_dyn_num_pose: 6
+init_dyn_min_deg: 20.0
+init_dyn_inflation_ori: 10
+init_dyn_inflation_vel: 100
+init_dyn_inflation_bg: 10
+init_dyn_inflation_ba: 100
+init_dyn_min_rec_cond: 1e-20
+init_dyn_bias_g: [0.0, 0.0, 0.0]
+init_dyn_bias_a: [0.0, 0.0, 0.0]
+
+# 기타
+multi_threading_subs: true
+record_timing_information: false
+record_timing_filepath: "/tmp/traj_timing.txt"

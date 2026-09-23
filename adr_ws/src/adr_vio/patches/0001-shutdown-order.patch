@@ -1,0 +1,19 @@
+diff --git a/ov_msckf/src/run_subscribe_msckf.cpp b/ov_msckf/src/run_subscribe_msckf.cpp
+index 6a5b341..4ba3ae2 100644
+--- a/ov_msckf/src/run_subscribe_msckf.cpp
++++ b/ov_msckf/src/run_subscribe_msckf.cpp
+@@ -114,6 +114,14 @@ int main(int argc, char **argv) {
+ 
+   // Final visualization
+   viz->visualize_final();
++
++  // 전역 shared_ptr 은 main 이 반환한 **뒤** 정적 소멸 단계에서 파괴된다. 그때는 아래
++  // shutdown() 으로 rclcpp 컨텍스트가 이미 내려가 있어, image_transport 퍼블리셔 소멸자가
++  // 죽은 컨텍스트를 건드린다 → 종료 때마다 SIGSEGV, 운 나쁘면 데드락으로 ros2 launch 가
++  // Ctrl+C 에 안 빠진다. shutdown 전에 직접 풀어 준다.
++  viz.reset();
++  sys.reset();
++
+ #if ROS_AVAILABLE == 1
+   ros::shutdown();
+ #elif ROS_AVAILABLE == 2
