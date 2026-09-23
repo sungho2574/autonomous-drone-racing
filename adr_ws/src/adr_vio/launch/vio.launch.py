@@ -35,8 +35,16 @@ IMU_SENSOR_PATH = 'link/base_link/sensor/imu_sensor/imu'   # 모델 SDF 의 센�
 
 def _nodes(context, *args, **kwargs):
     """world 를 실제 문자열로 풀어 IMU 브릿지를 만들고, ov_msckf 가 빌드돼 있는지 확인한다."""
-    world = LaunchConfiguration('world').perform(context)
-    sim_time = {'use_sim_time': LaunchConfiguration('use_sim_time').perform(context).lower() == 'true'}
+    # ⚠️ launch 인자를 그대로 parameters 에 넣으면 전부 **문자열**로 들어간다.
+    #    use_sim_time 은 rclcpp 가 bool 로 미리 선언해 둔 파라미터라, 문자열 "true" 를 주면
+    #    InvalidParameterTypeException 으로 노드가 뜨자마자 죽는다(토픽이 아예 안 생긴다).
+    #    그래서 여기서 전부 실제 파이썬 타입으로 풀어서 넘긴다.
+    def arg(name):
+        return LaunchConfiguration(name).perform(context)
+
+    world = arg('world')
+    use_sim_time = arg('use_sim_time').lower() in ('true', '1')
+    sim_time = {'use_sim_time': use_sim_time}
     imu_gz = f'/world/{world}/model/{MODEL_NAME}/{IMU_SENSOR_PATH}'
     nodes = [
         # gz IMU(250 Hz) → /adr/imu. PX4 내부 gz_bridge 와는 별개로 ROS 쪽에도 IMU 가 필요하다.
@@ -65,18 +73,20 @@ def _nodes(context, *args, **kwargs):
              namespace='ov_msckf', output='screen',
              parameters=[{
                  'config_path': config,
-                 'verbosity': LaunchConfiguration('verbosity'),
+                 'verbosity': arg('verbosity'),
                  'use_stereo': False,
                  'max_cameras': 1,
                  'save_total_state': False,
-                 'use_sim_time': LaunchConfiguration('use_sim_time'),
+                 **sim_time,
              }],
              # 특징점 디버그 영상. OpenVINS 는 이 퍼블리셔의 구독자가 0 이면 아예 그리지 않는다
              # (ROS2Visualizer::publish_images 의 getNumSubscribers()==0 → return).
              # 원래 이름(/ov_msckf/trackhist)으로 보고 싶으면 이 remap 을 지우면 된다.
-             remappings=[('trackhist', '/adr/vio/debug_image')]),
+             remappings=[('trackhist', '/adr/vio/debug_image')],
+             on_exit=[LogInfo(msg='[vio] ov_msckf 가 종료됐다. 위 로그의 첫 에러를 볼 것 '
+                                  '(설정 파일 경로/형식, 파라미터 타입, 토픽 이름 순으로 자주 걸린다)')]),
         Node(package='adr_vio', executable='vio_align', name='vio_align', output='screen',
-             parameters=[{'align_mode': LaunchConfiguration('align_mode').perform(context), **sim_time}]),
+             parameters=[{'align_mode': arg('align_mode'), **sim_time}]),
     ]
     return nodes
 

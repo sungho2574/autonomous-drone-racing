@@ -476,9 +476,20 @@ sim IMU 에는 바이어스 random walk 가 아예 없어 그대로 쓰면 필�
 
 ### 13.6 잘 안 될 때
 
+**아무것도 안 뜰 때는 이 순서로** — `/ov_msckf/*` 토픽이 하나도 없으면 노드가 뜨자마자 죽은 것이다.
+
+```bash
+ros2 pkg list | grep ov_                     # ov_core ov_init ov_msckf 세 개가 나와야 한다
+ros2 topic list | grep -E 'adr/imu|ov_msckf' # /adr/imu 와 /ov_msckf/* 가 있나
+ros2 topic hz /adr/imu                       # 250 Hz 근처여야 한다 (없으면 world 이름 불일치)
+ros2 node list | grep ov_msckf               # 없으면 launch 터미널의 첫 빨간 줄을 본다
+```
+
 | 증상 | 원인 / 조치 |
 |---|---|
-| `ov_msckf 패키지를 찾을 수 없다` | 13.1 미수행. `setup_openvins.sh` → colcon build → `source install/setup.bash` |
+| `ov_msckf 패키지를 찾을 수 없다` | 13.1 미수행(또는 `adr_ws/src/open_vins` 를 지웠다). `setup_openvins.sh` → colcon build → `source install/setup.bash` |
+| `ov_msckf` 노드만 즉사 (다른 노드는 뜸) | 파라미터 타입 문제였다 — launch 인자를 그대로 `parameters` 에 넣으면 문자열이 되고, `use_sim_time` 은 bool 이라 `InvalidParameterTypeException` 으로 죽는다. `vio.launch.py` 가 이제 전부 실제 타입으로 풀어서 넘긴다 |
+| `/adr/imu` 가 없음 | `world` 인자가 `sim.launch.py` 와 달라 gz 토픽 경로가 틀린 것. `gz topic -l \| grep imu` 로 실제 이름 확인 |
 | VIO odometry 가 영영 안 나옴 | static 초기화가 안 걸린 것. 이륙 전 `init_window_time`(1 s) 이상 **정지**해 있어야 하고, 그 뒤 움직임이 `init_imu_thresh` 를 넘어야 한다. `verbosity:=DEBUG` 로 초기화 로그 확인 |
 | `정렬 대기 중` 경고 반복 | 기준 TF `map→base_link` 가 없다. sim 은 `px4_odom_to_tf`(= `sim.launch.py`), 실기체는 mocap 이 떠 있어야 한다 |
 | 궤적이 금방 발산 | 특징점 부족. `/adr/vio/debug_image` 로 추적점 수부터 본다(수십 개는 돼야 한다). `scene.yaml` 의 기둥·상자를 늘리거나 `tile_px` 를 줄여 바닥 격자를 촘촘하게, 그래도 모자라면 `fast_threshold` 를 더 낮춘다 |
