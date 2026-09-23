@@ -22,6 +22,7 @@ autonomous-drone-racing/
     ├── adr_planning/             # min-snap 궤적 생성
     ├── adr_control/              # PX4 offboard 제어 (step1: position control)
     ├── adr_bringup/              # 미션 launch(step1), 게이트 맵(gates.yaml), rviz 노드, mocap 브릿지
+    ├── adr_vio/                  # (선택) OpenVINS VIO — 설정 생성·map 정렬·rviz 궤적. 제어 미반영
     ├── px4_msgs/                 # submodule (release/1.16)
     └── motion_capture_tracking/  # submodule (Qualisys 등 mocap → /poses, TF)
 ```
@@ -90,6 +91,17 @@ ros2 launch adr_sim sim.launch.py
 # T2 — min-snap 계획 + position control (자동 arm → 이륙 → 2바퀴 → 착륙)
 ros2 launch adr_bringup step1.launch.py laps:=2 time_scale:=1.0
 ```
+
+VIO(OpenVINS) 로 위치 추정을 같이 재 보려면 터미널 하나를 더 쓴다 (최초 1회 설치 필요 —
+[docs §13](docs/step1_architecture.md#13-vio-openvins-로-위치-추정-재-보기)):
+
+```bash
+adr_ws/src/adr_vio/scripts/setup_openvins.sh && (cd adr_ws && colcon build --symlink-install --packages-select ov_core ov_init ov_msckf adr_vio)
+ros2 launch adr_vio vio.launch.py
+```
+
+rviz 의 하늘색 `VioPath` 가 VIO 궤적, 빨간 `FlownPath` 가 실제다. 특징점 추적 영상은
+`ros2 run rqt_image_view rqt_image_view /adr/vio/debug_image` — **볼 때만** 그려진다.
 
 `sim.launch.py` 옵션: `ev:=false`(진실값 주입 대신 GPS 시뮬, airframe 4030 — 이때 T2 에 `origin_mode:=start` 필요) · `gui:=false`(headless) · `rviz:=false` · `soft_gl:=0`(GPU 있는 머신) · `agent:=micro-xrce-dds-agent`(snap 설치본) · `px4_dir:=...`
 

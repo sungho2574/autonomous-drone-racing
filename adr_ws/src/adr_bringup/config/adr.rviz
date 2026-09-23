@@ -51,6 +51,28 @@ Visualization Manager:
       Topic:
         Value: /adr/pnp/marks
       Value: true
+    # VIO(OpenVINS) 궤적. adr_vio/vio_align 이 map 에 정렬해서 낸다 (vio.launch.py 를 띄웠을 때만).
+    # 빨간 FlownPath(실제) 와 겹쳐 보면 drift 가 보인다.
+    - Class: rviz_default_plugins/Path
+      Name: VioPath
+      Enabled: true
+      Color: 0; 170; 255
+      Line Style: Lines
+      Topic:
+        Value: /adr/vio/path
+      Value: true
+    # OpenVINS 가 잡은 SLAM 특징점. vio_align 의 TF map→global 덕에 같은 화면에 뜬다.
+    - Class: rviz_default_plugins/PointCloud2
+      Name: VioFeatures
+      Enabled: false
+      Size (m): 0.05
+      Style: Spheres
+      Color: 255; 255; 0
+      Color Transformer: FlatColor
+      Topic:
+        Value: /ov_msckf/points_slam
+        Reliability Policy: Best Effort
+      Value: false
     - Class: rviz_default_plugins/Odometry
       Name: Odom
       Enabled: true

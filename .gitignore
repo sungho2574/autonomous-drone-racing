@@ -12,3 +12,6 @@ __pycache__/
 # misc
 .DS_Store
 *.swp
+
+# adr_vio/scripts/setup_openvins.sh 가 받아오는 외부 소스 (레포에 포함하지 않음)
+adr_ws/src/open_vins/

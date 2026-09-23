@@ -1,0 +1,70 @@
+%YAML:1.0
+# OpenVINS(ov_msckf) 설정 — 250급 레이싱 드론 sim(단안 30 Hz + IMU 250 Hz) 기준.
+# 캘리브레이션 값은 gen_ov_config.py 가 racer_spec.yaml 에서 만든 아래 두 파일에 있다.
+#
+# 튜닝 메모
+#   - sim 은 캘리브레이션이 정확하므로 calib_* 를 모두 끈다(추정 상태가 줄어 빠르고 안정적).
+#     실기체로 가면 calib_cam_timeoffset·extrinsics 부터 켜는 게 보통이다.
+#   - 초기화는 static: 기체가 멈춰 있다가 이륙하는 순간을 잡아 중력 정렬로 시작한다.
+#     이륙 전 정지 구간이 init_window_time 보다 짧으면 초기화가 안 된다.
+#   - track_frequency 는 영상 처리 상한. 소프트웨어 렌더링 VM 이면 15~20 으로 낮춘다.
+
+verbosity: "INFO"
+use_fej: true
+integration: "rk4"
+use_stereo: false
+max_cameras: 1
+
+calib_cam_extrinsics: false
+calib_cam_intrinsics: false
+calib_cam_timeoffset: false
+calib_imu_intrinsics: false
+calib_imu_g_sensitivity: false
+
+max_clones: 11
+max_slam: 50
+max_slam_in_update: 25
+max_msckf_in_update: 40
+dt_slam_delay: 1
+
+gravity_mag: 9.8            # 월드 SDF 의 <gravity>0 0 -9.8</gravity> 과 일치시킬 것
+
+feat_rep_msckf: "GLOBAL_3D"
+feat_rep_slam: "ANCHORED_MSCKF_INVERSE_DEPTH"
+feat_rep_aruco: "ANCHORED_MSCKF_INVERSE_DEPTH"
+
+try_zupt: false
+zupt_chi2_multipler: 0
+zupt_max_velocity: 0.1
+zupt_noise_multiplier: 10
+zupt_max_disparity: 0.5
+zupt_only_at_beginning: false
+
+init_window_time: 1.0       # 이륙 직전 정지 구간에서 이만큼을 초기화에 쓴다 [s]
+init_imu_thresh: 1.0        # 이 이상 가속도 분산이 튀면 '움직이기 시작'으로 보고 초기화 확정
+init_max_disparity: 10.0
+init_max_features: 50
+
+use_klt: true
+num_pts: 200
+fast_threshold: 15          # 게이트/바닥 텍스처가 빈약한 합성 장면이라 기본 20 보다 낮춤
+grid_x: 5
+grid_y: 5
+min_px_dist: 8
+knn_ratio: 0.70
+track_frequency: 20.0
+downsample_cameras: false
+num_opencv_threads: 2
+histogram_method: "HISTOGRAM"
+
+up_msckf_sigma_px: 1
+up_msckf_chi2_multipler: 1
+up_slam_sigma_px: 1
+up_slam_chi2_multipler: 1
+up_aruco_sigma_px: 1
+up_aruco_chi2_multipler: 1
+
+use_mask: false
+
+relative_config_imu: "kalibr_imu_chain.yaml"
+relative_config_imucam: "kalibr_imucam_chain.yaml"

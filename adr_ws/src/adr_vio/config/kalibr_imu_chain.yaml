@@ -1,0 +1,21 @@
+%YAML:1.0
+# 자동 생성: adr_vio/scripts/gen_ov_config.py. 직접 수정하지 말 것.
+imu0:
+  T_i_b:
+    - [1.0, 0.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0, 0.0]
+    - [0.0, 0.0, 1.0, 0.0]
+    - [0.0, 0.0, 0.0, 1.0]
+  accelerometer_noise_density: 1.2e-03    # 계산값 4.0e-04 의 3배
+  accelerometer_random_walk: 1.0e-04      # SDF 에 바이어스 RW 없음 → 작은 값
+  gyroscope_noise_density: 1.7e-04        # 계산값 5.5e-05 의 3배
+  gyroscope_random_walk: 1.0e-05
+  rostopic: /adr/imu
+  time_offset: 0.0
+  update_rate: 250.0
+  model: "kalibr"
+  Tw: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+  R_IMUtoGYRO: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+  Ta: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+  R_IMUtoACC: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+  Tg: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]

@@ -1,0 +1,18 @@
+%YAML:1.0
+# 자동 생성: adr_vio/scripts/gen_ov_config.py (입력: adr_sim/config/racer_spec.yaml). 직접 수정하지 말 것.
+# 실기체에서는 Kalibr 결과로 이 파일을 통째로 바꾼다 (형식 동일).
+#   T_imu_cam : 카메라(optical) → IMU(=base_link) 변환. 카메라 [0.045, 0.0, 0.022] m, 위로 20° 틸트
+cam0:
+  T_imu_cam:
+    - [ 0.0000000000,  0.3420201433,  0.9396926208,  0.0450000000]
+    - [-1.0000000000,  0.0000000000,  0.0000000000,  0.0000000000]
+    - [ 0.0000000000, -0.9396926208,  0.3420201433,  0.0220000000]
+    - [ 0.0000000000,  0.0000000000,  0.0000000000,  1.0000000000]
+  cam_overlaps: []
+  camera_model: pinhole
+  distortion_coeffs: [0.0, 0.0, 0.0, 0.0]   # gz 카메라는 왜곡 없음
+  distortion_model: radtan
+  intrinsics: [319.9988, 319.9988, 320.0000, 240.0000]   # fx, fy, cx, cy (hfov 90.0°)
+  resolution: [640, 480]
+  rostopic: /adr/camera/image_raw
+  timeshift_cam_imu: 0.0

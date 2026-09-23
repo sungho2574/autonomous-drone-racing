@@ -14,7 +14,8 @@
 10. [실기체(mocap) 전환](#10-실기체mocap-전환)
 11. [검증 체크리스트](#11-검증-체크리스트)
 12. [트러블슈팅](#12-트러블슈팅)
-13. [다음 단계(step 2/3)와의 접점](#13-다음-단계step-23와의-접점)
+13. [VIO (OpenVINS) 로 위치 추정 재 보기](#13-vio-openvins-로-위치-추정-재-보기)
+14. [다음 단계(step 2/3)와의 접점](#14-다음-단계step-23와의-접점)
 
 ---
 
@@ -74,6 +75,15 @@ graph TD
         MARK["gate_markers"]
     end
 
+    subgraph adr_vio ["adr_vio (선택: vio.launch.py)"]
+        OV["ov_msckf<br/>(OpenVINS)"]
+        ALIGN["vio_align<br/>map 정렬 · 궤적 · 오차"]
+    end
+
+    IMU(["/adr/imu<br/>(gz IMU 250 Hz)"])
+    VIO_PATH(["/adr/vio/path · /adr/vio/error"])
+    VIO_DEBUG(["/adr/vio/debug_image<br/>(구독자 있을 때만)"])
+
     FMU_IN(["/fmu/in/*<br/>offboard_control_mode · trajectory_setpoint · vehicle_command"])
     FMU_OUT(["/fmu/out/*<br/>vehicle_local_position · vehicle_status · vehicle_odometry"])
     EV(["/fmu/in/vehicle_visual_odometry"])
@@ -93,6 +103,11 @@ graph TD
     O2TF --> RVIZ
     MARK --> RVIZ
     PLAN -->|/adr/planned_path| RVIZ
+    GZ -->|imu_sensor| IMU --> OV
+    IMAGE --> OV
+    OV -->|/ov_msckf/odomimu| ALIGN --> VIO_PATH --> RVIZ
+    OV -.-> VIO_DEBUG
+    O2TF -.->|TF map→base_link| ALIGN
     MOCAP -->|/poses| MB --> EV --> AGENT
     GZ -.->|"OdometryPublisher 진실값<br/>ev:=true 일 때 EKF2 가 사용"| PX4
     AGENT <-->|uXRCE-DDS| PX4
@@ -101,6 +116,7 @@ graph TD
 
 step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner → px4_position_controller → PX4** 한 줄이다.
 카메라·인식 경로는 돌아가지만 아직 제어에 쓰이지 않고(step 3 에서 PnP → 위치 추정에 결합), mocap 경로는 실기체 전용이다(sim 에서는 gz `OdometryPublisher` 가 같은 역할).
+`adr_vio`(OpenVINS)도 같은 뜻에서 **곁다리**다 — 같은 카메라·IMU 를 받아 따로 추정만 하고 제어에는 안 들어간다(§13).
 
 ### 2.2 노드별 pub/sub
 
@@ -114,6 +130,8 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 | `ros_gz_bridge` (SITL) | gz `/adr_racer/camera`, `/clock`, `/model/adr_racer/odometry` | `/adr/camera/image_raw`, `/clock`, `/adr/ground_truth/odom` |
 | `camera_relay` (실기체) | `/image_raw` (v4l2_camera) | `/adr/camera/image_raw` |
 | `gate_detector` | `/adr/camera/image_raw` | `/adr/gate_detections` (2D bbox·중심, 면적순)<br/>(구독 있을 때만) `/adr/perception/debug_image` |
+| `ov_msckf` (OpenVINS, 선택) | `/adr/camera/image_raw`<br/>`/adr/imu` | `/ov_msckf/odomimu`·`pathimu`·`points_slam`<br/>(구독 있을 때만) `/adr/vio/debug_image` |
+| `vio_align` (선택) | `/ov_msckf/odomimu`<br/>TF `map→base_link` | `/adr/vio/path` (map)<br/>`/adr/vio/odom` + TF `map→vio_base_link`<br/>`/adr/vio/error`<br/>TF `map→global` (static) |
 
 `/fmu/out/*` 는 **best effort + volatile** 로 구독해야 한다(reliable 로 구독하면 아무것도 안 온다). 버전 관리되는 메시지는 토픽에 `_v<N>` 이 붙으며(예: `vehicle_status_v4`) `offboard_base.px4_topic()` 이 `MESSAGE_VERSION` 상수로 자동으로 맞춘다.
 
@@ -128,6 +146,8 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 | `gate_markers` | `adr_bringup` | 게이트 프레임(CUBE)·법선·id 마커, 맵 기반 `GateArray`, TF 누적 비행 경로 | 공통 |
 | `mocap_bridge` | `adr_bringup` | mocap 포즈(ENU) → `VehicleOdometry`(NED) 로 PX4 EKF2 에 주입 | 실기체 |
 | `camera_relay` | `adr_video` | 카메라 드라이버 출력을 `/adr/camera/image_raw` 규격으로 통일 | 실기체 |
+| `ov_msckf` | 외부(OpenVINS, `adr_vio` 가 설정·기동) | 단안 30 Hz + IMU 250 Hz MSCKF VIO. 자기 원점(`global`) 기준 포즈·특징점 | 선택 |
+| `vio_align` | `adr_vio` | VIO 의 `global` 을 `map` 에 정렬(TF)하고 궤적·오차를 낸다. 제어에는 안 들어간다 | 선택 |
 | `gate_detector` | `adr_perception` | 주황 HSV 임계 → 모폴로지 → `RETR_CCOMP` 컨투어(바깥 프레임 + 안쪽 구멍). 게이트마다 bbox, 개구부 중심(구멍 모멘트), 면적, 간이 신뢰도. 디버그 오버레이는 `rqt_image_view /adr/perception/debug_image` 로 볼 때만 생성. 파라미터 `adr_perception/config/gate_detector.yaml` | 공통 |
 
 ## 3. 좌표계와 규약
@@ -164,7 +184,7 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 - 반지름 4 m 원 위에 90° 간격, 게이트 중심 높이 1.5 m, 법선 = 원의 접선(CCW 진행).
 - 게이트: 내부 1.5 m, 외부 2.1 m(프레임 폭 0.3 m), 두께 0.1 m, 주황색.
 - `start` = 이륙 지점(바닥). G4→G1 사이 원호 위에 두어 이륙 후 첫 진입이 자연스럽다.
-- 값을 바꾸면 **`adr_sim/scripts/gen_world.py`** 를 다시 돌려 월드와 게이트 모델(`gate:` 치수)을 갱신하고 커밋한다(planner/markers 는 yaml 을 직접 읽으므로 자동 반영).
+- 값을 바꾸면 **`adr_sim/scripts/gen_world.py`** 를 다시 돌려 월드·게이트 모델(`gate:` 치수)·배경(`scene.yaml`)을 갱신하고 커밋한다(planner/markers 는 yaml 을 직접 읽으므로 자동 반영).
 
 ## 5. min-snap 궤적 생성
 
@@ -239,9 +259,23 @@ airframe `4031_gz_adr_racer_ev`: 4030 + `EKF2_EV_CTRL 15`, `EKF2_HGT_REF 3`, `EK
 
 box 링크 4개(좌·우·상·하)로 된 static 모델. 원점 = 개구부 중심, +x = 통과 방향. 색 `1.0 0.45 0.0`.
 
+### 배경: 텍스처 바닥 `adr_ground` + 장애물
+
+기본 월드는 무늬 없는 바닥에 게이트 4개뿐이라 KLT 로 추적할 코너가 거의 없다 — VIO(§13)가 바로 발산한다.
+그래서 [`adr_sim/config/scene.yaml`](../adr_ws/src/adr_sim/config/scene.yaml) 로 **시각적 특징만을 위한 배경**을
+따로 만든다(비행 코스와는 무관, `gen_world.py` 가 같이 생성).
+
+- **텍스처 바닥** `adr_ground`: 60×60 m 상자(윗면 정확히 z=0). 512² PNG 를 `<pbr><albedo_map>` 으로 입히는데,
+  8 px 타일 = 바닥 0.94 m 격자라 타일 경계마다 코너가 생긴다. PNG 는 `gen_world.py` 가 외부 의존성 없이
+  직접 써서(zlib) 41 KB. 무한 평면 `ground_plane` 은 z=−0.02 로 내려 배경으로만 남긴다.
+- **장애물**: 기둥 12개(반지름 6.5~7.5 m, 높이 2~4 m) + 상자 10개(반지름 8~12 m). 전부 코스 바깥이다 —
+  코스 반지름 4 m + 게이트 반폭 1.05 m 보다 최소 1.5 m 이상 떨어져 있다(최소 반지름 6.6 m).
+  카메라가 20° 위를 보므로 바닥보다 **세로로 선 기둥**이 시차(parallax)를 주는 데 효율이 좋다.
+- `seed` 를 바꾸면 배치·색·텍스처가 통째로 달라진다. VIO 가 특정 배경에 과적합하지 않았는지 볼 때 쓴다.
+
 ### 월드 `adr_cross.sdf`
 
-`gen_world.py` 가 `gates.yaml` 에서 생성. PX4 가 gz 를 직접 띄우지 않는 **standalone 모드**이므로 PX4 `server.config` 가 넣어주던 시스템 플러그인(Physics, UserCommands, SceneBroadcaster, Contact, Imu, AirPressure, Magnetometer, NavSat, Sensors(ogre2))을 월드에 직접 포함하고, navsat 용 `<spherical_coordinates>` 도 넣는다. 게이트 4개와 `adr_racer` 를 `<include>` 로 배치(드론 이름 `adr_racer` = `PX4_GZ_MODEL_NAME`).
+`gen_world.py` 가 `gates.yaml`(코스) + `scene.yaml`(배경) 에서 생성. PX4 가 gz 를 직접 띄우지 않는 **standalone 모드**이므로 PX4 `server.config` 가 넣어주던 시스템 플러그인(Physics, UserCommands, SceneBroadcaster, Contact, Imu, AirPressure, Magnetometer, NavSat, Sensors(ogre2))을 월드에 직접 포함하고, navsat 용 `<spherical_coordinates>` 도 넣는다. 게이트 4개와 `adr_racer` 를 `<include>` 로 배치(드론 이름 `adr_racer` = `PX4_GZ_MODEL_NAME`).
 
 ## 8. 환경 설치 (Ubuntu VM)
 
@@ -362,7 +396,97 @@ Ubuntu VM:
 | px4_msgs import 실패 | colcon 빌드가 install 단계 전에 중단됨. `colcon build --packages-select px4_msgs` 후 다시 source |
 | `ros-humble-ros-gzharmonic` 설치 충돌 | 기존 `ros-humble-ros-gz*`(Fortress) 제거 후 설치 |
 
-## 13. 다음 단계(step 2/3)와의 접점
+## 13. VIO (OpenVINS) 로 위치 추정 재 보기
+
+step 3 의 위치 추정 후보(OpenVINS + 게이트 맵 PnP)에서 **VIO 쪽만 먼저 떼어 재 보는** 장치다.
+제어에는 전혀 들어가지 않는다 — 기체는 여전히 mocap/진실값으로 날고, VIO 는 옆에서 같은 입력을 받아
+따로 추정할 뿐이다. 그래서 켜도 비행이 달라지지 않고, 끄면 아무 흔적도 없다.
+
+### 13.1 설치 (최초 1회)
+
+OpenVINS 는 레포에 넣지 않는다. 그 레포의 `ov_data`(공개 데이터셋 groundtruth)가 376 MB 인데 우리는
+안 쓰기 때문이다. 필요한 3개 패키지만 sparse·shallow 로 받으면 ~15 MB 다.
+
+```bash
+sudo apt install libeigen3-dev libboost-all-dev libopencv-dev libceres-dev
+adr_ws/src/adr_vio/scripts/setup_openvins.sh          # → adr_ws/src/open_vins (.gitignore 됨)
+cd adr_ws && colcon build --symlink-install --packages-select ov_core ov_init ov_msckf adr_vio
+source install/setup.bash
+```
+
+`adr_ws/src` 안에 받으므로 워크스페이스도 `source` 도 하나로 유지된다. 버전은 `v2.7` 고정(`OV_REF=...` 로 변경).
+
+### 13.2 실행
+
+```bash
+# T1  시뮬 (gz + PX4 + 브릿지 + rviz)
+ros2 launch adr_sim sim.launch.py
+# T2  VIO — gz IMU 브릿지 + OpenVINS + 정렬/궤적
+ros2 launch adr_vio vio.launch.py
+# T3  미션 (이륙 → 코스 비행)
+ros2 launch adr_bringup step1.launch.py
+```
+
+인자: `align_mode:=yaw|se3|none` · `imu_bridge:=false`(실기체) · `world:=...` · `config:=<estimator_config.yaml>` · `verbosity:=DEBUG`
+
+### 13.3 보는 법
+
+| 무엇 | 어디서 |
+|---|---|
+| **VIO 궤적** | rviz 의 `VioPath`(하늘색 `/adr/vio/path`). 빨간 `FlownPath`(실제)와 겹쳐 보면 drift 가 그대로 보인다 |
+| SLAM 특징점 | rviz 의 `VioFeatures`(`/ov_msckf/points_slam`, 기본 꺼짐). `vio_align` 의 TF `map→global` 덕에 같은 좌표에 뜬다 |
+| **특징점 추적 영상** | `ros2 run rqt_image_view rqt_image_view /adr/vio/debug_image` |
+| 숫자 | `ros2 topic echo /adr/vio/error`, 또는 `vio_align` 이 5 초마다 찍는 `now / rmse / max / 이동거리 / drift%` 로그 |
+
+디버그 영상은 **볼 때만 만들어진다.** OpenVINS 의 `ROS2Visualizer::publish_images()` 가
+`getNumSubscribers() == 0` 이면 그리기 전에 빠져나가므로, rqt 를 닫으면 렌더링 비용이 0 이 된다
+(`points_*` 도 같은 방식). 원래 이름으로 보고 싶으면 `vio.launch.py` 의 `trackhist` remap 을 지우면 된다.
+
+### 13.4 map 정렬 (`vio_align`)
+
+OpenVINS 는 **자기 원점**(`global`: 초기화 시점 자세, 중력 정렬, yaw=0)에서 추정을 낸다. 그대로는 `map` 과
+연결이 없어 rviz 에 아무것도 안 나온다. `vio_align` 이 첫 VIO 포즈와 그 순간의 기준 포즈
+(TF `map→base_link` — sim 은 PX4 EKF, 실기체는 mocap)로 변환을 한 번 구해
+
+```
+T_map_global = T_map_base(t0) · T_global_imu(t0)⁻¹
+```
+
+TF `map→global` 을 static 으로 쏜다. 이 TF 하나로 OpenVINS 가 직접 내는 토픽(`pathimu`, `points_slam`)까지
+전부 map 좌표에서 보인다. 기본 `align_mode: yaw` 는 평행이동 + yaw 만 맞춘다 — `global` 은 이미 중력
+정렬이라 roll/pitch 까지 맞추면 VIO 의 기울기 오차를 감추게 된다. `se3` 는 6-DoF 로 완전히 맞춘다.
+
+오차(`/adr/vio/error`)는 '절대 진실' 대비가 아니라 **기준 TF 대비 차이**다. sim 에서 기준은 gz 진실값이
+EKF2 를 거쳐 들어온 값이라 사실상 진실값이고, 실기체에서는 mocap 이다.
+
+### 13.5 설정
+
+| 파일 | 내용 |
+|---|---|
+| `adr_vio/config/estimator_config.yaml` | 필터 설정(단안, `max_clones`, 초기화, 특징점 수). sim 은 캘리브레이션이 정확하므로 `calib_*` 를 모두 끈다 |
+| `adr_vio/config/kalibr_imucam_chain.yaml` | 카메라 내부파라미터 + `T_imu_cam` — **생성물** |
+| `adr_vio/config/kalibr_imu_chain.yaml` | IMU 노이즈/레이트 — **생성물** |
+
+두 kalibr 파일은 `adr_vio/scripts/gen_ov_config.py` 가 `adr_sim/config/racer_spec.yaml` 에서 만든다.
+카메라 위치·틸트를 바꾸면 **반드시 다시 돌려야** VIO 가 통째로 기울지 않는다(그리고 `gate_pnp.yaml` 의
+`cam_tilt_deg` 도 같이 맞춰야 한다). 형식이 Kalibr 출력과 같으므로 실기체에서는 파일만 갈아 끼우면 된다.
+
+IMU 노이즈는 gz 의 샘플당 stddev 를 연속시간 밀도로 환산(`σ_c = σ_d/√rate`)한 뒤 3배로 부풀렸다.
+sim IMU 에는 바이어스 random walk 가 아예 없어 그대로 쓰면 필터가 IMU 를 과신한다.
+
+### 13.6 잘 안 될 때
+
+| 증상 | 원인 / 조치 |
+|---|---|
+| `ov_msckf 패키지를 찾을 수 없다` | 13.1 미수행. `setup_openvins.sh` → colcon build → `source install/setup.bash` |
+| VIO odometry 가 영영 안 나옴 | static 초기화가 안 걸린 것. 이륙 전 `init_window_time`(1 s) 이상 **정지**해 있어야 하고, 그 뒤 움직임이 `init_imu_thresh` 를 넘어야 한다. `verbosity:=DEBUG` 로 초기화 로그 확인 |
+| `정렬 대기 중` 경고 반복 | 기준 TF `map→base_link` 가 없다. sim 은 `px4_odom_to_tf`(= `sim.launch.py`), 실기체는 mocap 이 떠 있어야 한다 |
+| 궤적이 금방 발산 | 특징점 부족. `/adr/vio/debug_image` 로 추적점 수부터 본다(수십 개는 돼야 한다). `scene.yaml` 의 기둥·상자를 늘리거나 `tile_px` 를 줄여 바닥 격자를 촘촘하게, 그래도 모자라면 `fast_threshold` 를 더 낮춘다 |
+| 바닥이 텍스처 없이 허옇게만 보임 | `albedo_map` 을 못 찾았거나(=`GZ_SIM_RESOURCE_PATH` 에 `adr_sim/assets/models` 없음) 소프트웨어 렌더러가 PBR 을 못 그린 것. 기둥·상자만으로도 VIO 는 돌아가지만 특징이 줄어든다 |
+| 궤적이 통째로 기울거나 축이 뒤바뀜 | `T_imu_cam` 불일치. `racer_spec.yaml` 을 바꾸고 `gen_ov_config.py` 를 안 돌렸을 때 |
+| 프레임이 뚝뚝 끊김 | 소프트웨어 렌더링 VM 의 CPU 부족. `track_frequency` 15, `num_pts` 100 으로 낮춘다 |
+
+## 14. 다음 단계(step 2/3)와의 접점
 
 - **step 2 (RL + rate controller)**: `adr_control` 에 `OffboardBase` 상속 노드 추가. 관측 = `/adr/gates`(맵) + `/fmu/out/vehicle_odometry`, 출력 = `/fmu/in/vehicle_rates_setpoint` + `OffboardControlMode(body_rate=True)`. `step1.launch.py` 의 컨트롤러 노드만 교체. 학습 환경은 별도(예: gz 병렬 or 경량 시뮬)이며 airframe/모델 스펙(`racer_spec.yaml`)을 공유.
-- **step 3 (Gatenet + OpenVINS)**: `adr_perception` 이 `/adr/camera/image_raw` → `/adr/detected_gates`(카메라 프레임 `GateArray`), 새 `adr_localization`(OpenVINS + 게이트 맵 PnP) 이 `map→base_link` 를 제공하고 mocap 대신 `vehicle_visual_odometry` 를 채운다. 인터페이스(`GateArray`, `frames.py`, `mocap_bridge` 의 주입 경로)는 그대로 재사용.
+- **step 3 (Gatenet + OpenVINS)**: VIO 는 §13 으로 이미 붙여 재 볼 수 있다. `adr_perception` 이 `/adr/camera/image_raw` → `/adr/detected_gates`(카메라 프레임 `GateArray`), 새 `adr_localization`(OpenVINS + 게이트 맵 PnP) 이 `map→base_link` 를 제공하고 mocap 대신 `vehicle_visual_odometry` 를 채운다. 인터페이스(`GateArray`, `frames.py`, `mocap_bridge` 의 주입 경로)는 그대로 재사용.

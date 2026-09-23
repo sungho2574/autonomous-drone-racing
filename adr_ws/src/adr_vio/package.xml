@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>adr_vio</name>
+  <version>0.1.0</version>
+  <description>OpenVINS 기반 VIO (step3 위치 추정 후보) — 설정 생성, map 정렬, rviz 궤적</description>
+  <maintainer email="sungho2574@gmail.com">sungho</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <!-- OpenVINS(ov_msckf) 는 레포에 넣지 않는다. scripts/setup_openvins.sh 가
+       adr_ws/src/open_vins 에 sparse clone 하며, 그 뒤 colcon 이 같이 빌드한다. -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
