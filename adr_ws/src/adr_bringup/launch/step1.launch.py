@@ -1,15 +1,17 @@
-"""step1 파이프라인: gate_planner(min-snap) + px4_position_controller (+ perception, PnP 시각화).
+"""step1 파이프라인: gate_planner(min-snap) + px4_position_controller (+ perception, PnP, VIO).
 
 선행: ros2 launch adr_sim sim.launch.py (gz+PX4+Agent+rviz 일괄) 또는 real.launch.py
 인자: laps:=2  time_scale:=1.0  land_after:=true  perception:=true  pnp:=true  use_sim_time:=true
       origin_mode:=world|start  (PX4 local 원점이 map 과 다를 때 = GPS 시뮬 모드(ev:=false) 면 start)
+      vio:=true|false           OpenVINS VIO 같이 띄우기 (기본 false — 최초 1회 설치 필요, docs §13)
 """
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -27,6 +29,10 @@ def generate_launch_description():
         DeclareLaunchArgument('perception', default_value='true'),
         DeclareLaunchArgument('pnp', default_value='true'),
         DeclareLaunchArgument('origin_mode', default_value='world'),
+        # VIO 는 기본 꺼둔다 — OpenVINS 를 따로 받아 빌드해야 하고(docs §13.1), CPU 도 꽤 먹는다.
+        # 켜져 있는데 ov_msckf 가 없으면 이 launch 전체가 에러와 함께 멈춘다(조용히 넘어가지 않는다).
+        DeclareLaunchArgument('vio', default_value='false'),
+        DeclareLaunchArgument('world', default_value='adr_cross'),   # vio 의 gz IMU 토픽 경로용
 
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
              parameters=[os.path.join(bringup_share, 'config', 'planner.yaml'),
@@ -47,4 +53,12 @@ def generate_launch_description():
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_pnp.yaml'),
                          sim_time], condition=IfCondition(LaunchConfiguration('pnp')),
              output='screen'),
+        # VIO (선택) — 제어에는 안 들어간다. sim 이면 gz IMU 브릿지도 같이 뜬다.
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(
+                get_package_share_directory('adr_vio'), 'launch', 'vio.launch.py')),
+            launch_arguments={'use_sim_time': LaunchConfiguration('use_sim_time'),
+                              'world': LaunchConfiguration('world'),
+                              'imu_bridge': LaunchConfiguration('use_sim_time')}.items(),
+            condition=IfCondition(LaunchConfiguration('vio'))),
     ])

@@ -35,10 +35,8 @@ IMU_SENSOR_PATH = 'link/base_link/sensor/imu_sensor/imu'   # 모델 SDF 의 센�
 
 def _nodes(context, *args, **kwargs):
     """world 를 실제 문자열로 풀어 IMU 브릿지를 만들고, ov_msckf 가 빌드돼 있는지 확인한다."""
-    # ⚠️ launch 인자를 그대로 parameters 에 넣으면 전부 **문자열**로 들어간다.
-    #    use_sim_time 은 rclcpp 가 bool 로 미리 선언해 둔 파라미터라, 문자열 "true" 를 주면
-    #    InvalidParameterTypeException 으로 노드가 뜨자마자 죽는다(토픽이 아예 안 생긴다).
-    #    그래서 여기서 전부 실제 파이썬 타입으로 풀어서 넘긴다.
+    # launch 인자는 여기서 실제 파이썬 타입으로 풀어서 넘긴다. launch_ros 가 yaml 로 자동
+    # 추론해 주긴 하지만("true"→bool), C++ 노드는 타입이 어긋나면 그 자리에서 죽으므로 명시한다.
     def arg(name):
         return LaunchConfiguration(name).perform(context)
 

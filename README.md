@@ -67,12 +67,30 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-PX4 는 `make px4_sitl` 만 끝나 있으면 된다(airframe 은 실행 시 자동 주입, PX4 소스 수정·재빌드 불필요):
+### PX4
+
+`make px4_sitl` 만 끝나 있으면 된다(airframe 은 실행 시 자동 주입, PX4 소스 수정·재빌드 불필요):
 
 ```bash
 export PX4_DIR=~/PX4-Autopilot      # 클론 위치가 다르면 그 경로로. 기본값이면 생략 가능
 (cd $PX4_DIR && make px4_sitl)
 ```
+
+### OpenVINS (VIO 를 쓸 때만, 최초 1회)
+
+**`adr_vio`(VIO)는 설치를 따로 해야 돌아간다.** OpenVINS 는 레포에 넣지 않았다 — 그 레포의
+`ov_data`(공개 데이터셋 groundtruth)가 376 MB 인데 우리는 안 쓴다. 아래 스크립트가 필요한 3개
+패키지만 sparse·shallow 로 `adr_ws/src/open_vins` 에 받는다(~15 MB, `.gitignore` 대상이라
+`git clone`/`git pull` 로는 안 따라온다. 워크스페이스를 밀었다면 다시 받아야 한다).
+
+```bash
+sudo apt install libeigen3-dev libboost-all-dev libopencv-dev libceres-dev
+adr_ws/src/adr_vio/scripts/setup_openvins.sh
+cd adr_ws && colcon build --symlink-install && source install/setup.bash
+ros2 pkg list | grep ov_        # ov_core ov_init ov_msckf 세 개가 나와야 한다
+```
+
+안 하면 `vio:=true` 로 띄울 때 launch 가 설치 안내와 함께 멈춘다(그냥 비행만 할 거면 필요 없다).
 
 ## 실행 (시뮬, 터미널 2개)
 
@@ -92,12 +110,11 @@ ros2 launch adr_sim sim.launch.py
 ros2 launch adr_bringup step1.launch.py laps:=2 time_scale:=1.0
 ```
 
-VIO(OpenVINS) 로 위치 추정을 같이 재 보려면 터미널 하나를 더 쓴다 (최초 1회 설치 필요 —
-[docs §13](docs/step1_architecture.md#13-vio-openvins-로-위치-추정-재-보기)):
+VIO(OpenVINS)로 위치 추정을 같이 재 보려면 T2 에 `vio:=true` 만 붙인다 — 터미널 수는 그대로 2개다.
+**단, 위 "OpenVINS" 설치가 먼저 돼 있어야 한다** ([docs §13](docs/step1_architecture.md#13-vio-openvins-로-위치-추정-재-보기)):
 
 ```bash
-adr_ws/src/adr_vio/scripts/setup_openvins.sh && (cd adr_ws && colcon build --symlink-install --packages-select ov_core ov_init ov_msckf adr_vio)
-ros2 launch adr_vio vio.launch.py
+ros2 launch adr_bringup step1.launch.py laps:=2 vio:=true
 ```
 
 rviz 의 하늘색 `VioPath` 가 VIO 궤적, 빨간 `FlownPath` 가 실제다. 특징점 추적 영상은
@@ -117,6 +134,8 @@ PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙�
 | gz 가 `ign gazebo --force-version 6` 으로 뜸    | apt 의 Fortress 용 ros_gz 가 잡힘. Harmonic 워크스페이스를 먼저 source                                                                                     |
 | `Unknown message type [9]`                      | 위와 동일 (브릿지가 Fortress 판)                                                                                                                           |
 | PX4 가 `no autostart file found (…/4030_*)`     | `px4_dir` 가 잘못됐거나 `make px4_sitl` 미완료. launch 로그의 `[px4] … airframes→` 줄 확인                                                                 |
+| `vio:=true` 인데 `ov_msckf 패키지를 찾을 수 없다` | OpenVINS 미설치. 설치 절의 `setup_openvins.sh` → `colcon build` → `source install/setup.bash`. 워크스페이스를 밀면 매번 다시 받아야 한다 |
+| VIO 궤적·디버그 이미지가 아예 안 보임 | `vio:=true` 를 안 붙였다. `ros2 node list \| grep -E 'vio_align\|ov_msckf'` 로 확인 |
 | PX4 가 `waiting for gz world` 에서 60 s 후 종료 | gz 서버가 안 떴거나 월드 이름 불일치. T1 로그 앞부분의 gz 에러 확인                                                                                        |
 
 자세한 내용은 [docs/step1_architecture.md](docs/step1_architecture.md).
