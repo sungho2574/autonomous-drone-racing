@@ -29,7 +29,9 @@ Visualization Manager:
       Name: PlannedPath
       Enabled: true
       Color: 25; 255; 0
-      Line Style: Lines
+      # Lines 는 1 px GL 라인이라 굵기 조절이 안 된다. Billboards 여야 Line Width 가 먹는다.
+      Line Style: Billboards
+      Line Width: 0.05
       Topic:
         Value: /adr/planned_path
         Durability Policy: Transient Local
@@ -39,7 +41,8 @@ Visualization Manager:
       Name: FlownPath
       Enabled: true
       Color: 255; 25; 0
-      Line Style: Lines
+      Line Style: Billboards
+      Line Width: 0.05
       Topic:
         Value: /adr/flown_path
       Value: true
@@ -57,9 +60,10 @@ Visualization Manager:
     - Class: rviz_default_plugins/Path
       Name: VioPath (raw)
       Enabled: true
-      Alpha: 0.35
-      Color: 150; 215; 240
-      Line Style: Lines
+      Alpha: 0.5
+      Color: 120; 195; 230
+      Line Style: Billboards
+      Line Width: 0.04
       Topic:
         Value: /adr/vio/path
       Value: true
@@ -68,8 +72,9 @@ Visualization Manager:
       Name: CorrectedPath
       Enabled: true
       Alpha: 1.0
-      Color: 0; 130; 220
-      Line Style: Lines
+      Color: 0; 110; 210
+      Line Style: Billboards
+      Line Width: 0.05
       Topic:
         Value: /adr/state/corrected_path
       Value: true
