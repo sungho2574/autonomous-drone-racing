@@ -48,6 +48,8 @@ from launch.substitutions import (EnvironmentVariable, LaunchConfiguration, Path
                                   PythonExpression, TextSubstitution)
 from launch_ros.actions import Node
 
+from adr_bringup.launch_cleanup import kill_stale
+
 SIM_SHARE = Path(get_package_share_directory('adr_sim'))
 ASSETS = SIM_SHARE / 'assets'
 MODEL_NAME = 'adr_racer'          # worlds/*.sdf 의 <include><name> 과 동일
@@ -95,6 +97,7 @@ def _stale_patterns(world: str):
     즉 **다른 프로젝트의 gz sim 도 같이 죽는다**. 이 워크스페이스는 한 번에 월드 하나만 쓰는
     전제라 그대로 두지만, 다른 gz 를 띄워 두고 작업한다면 이 목록에서 빼야 한다.
     나머지는 월드 이름이나 이 레포 경로로 스코프를 좁혀 둔다.
+    공통 주의사항은 adr_bringup/launch_cleanup.py 주석 참고.
     """
     return [
         # PX4: -d 데몬이 락을 쥔 채 남으면 다음 기동이 'PX4 server already running' 으로 막힌다.
@@ -116,21 +119,12 @@ def _stale_patterns(world: str):
     ]
 
 
-def _kill_stale(world: str) -> list:
-    """이전 실행의 잔재를 정리하고, 실제로 죽인 것들의 설명을 돌려준다."""
-    killed = []
-    for pattern, desc in _stale_patterns(world):
-        r = subprocess.run(['pkill', '-9', '-f', pattern],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if r.returncode == 0:        # 0 = 하나 이상 매칭해서 죽였음
-            killed.append(desc)
-    return killed
 
 
 def _cleanup(context, *args, **kwargs):
     """다른 무엇보다 **먼저** 실행돼야 한다 — 우리 gz 가 뜬 뒤에 돌면 그걸 죽인다."""
     world = LaunchConfiguration('map').perform(context)
-    killed = _kill_stale(world)
+    killed = kill_stale(_stale_patterns(world))
     if killed:
         return [LogInfo(msg=f'[cleanup] 이전 실행 잔재 정리: {", ".join(killed)}')]
     return []

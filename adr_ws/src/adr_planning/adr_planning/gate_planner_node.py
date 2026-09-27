@@ -3,6 +3,7 @@
 한 번 계산해 transient_local 로 latch 하므로 컨트롤러가 나중에 떠도 받는다.
 """
 import os
+import time
 
 import numpy as np
 import rclpy
@@ -62,35 +63,75 @@ class GatePlanner(Node):
         frame_id = self.get_parameter('frame_id').value
 
         course = load_course(gates_file)
+        laps = int(self.get_parameter('laps').value)
         wp, yaw = course_waypoints(
             course,
-            laps=int(self.get_parameter('laps').value),
+            laps=laps,
             approach_dist=float(self.get_parameter('approach_dist').value),
             end_at_start=bool(self.get_parameter('end_at_start').value))
+        # 계획 전후를 반드시 찍는다. 예전엔 여기서 조용히 몇 분을 태우는 바람에
+        # (dense SVD, big_track 10바퀴 = 361 세그먼트 → 약 4분) 노드 등록조차 못 했고,
+        # 경로도 비행도 없으니 '고장난 것'처럼 보였다. 지금은 희소 KKT 라 1초 안쪽이지만
+        # 맵·laps 를 키우면 다시 길어질 수 있으므로 진행 상황은 계속 보여 준다.
+        self.get_logger().info(f'{gates_file}: 게이트 {len(course.gates)}개 × {laps}바퀴 → '
+                               f'웨이포인트 {len(wp)}개, 세그먼트 {len(wp) - 1}개. min-snap 계획 시작...')
+        t_plan = time.time()
         traj = plan(wp, yaw,
                     v_avg=float(self.get_parameter('v_avg').value),
                     v_max=float(self.get_parameter('v_max').value),
                     a_max=float(self.get_parameter('a_max').value),
                     t_min=float(self.get_parameter('t_min').value))
+        dt_plan = time.time() - t_plan
         v_pk, a_pk = traj.peak()
         self.get_logger().info(
-            f'{gates_file}: {len(wp)} waypoints, {len(traj.segments)} segments, '
+            f'계획 완료 ({dt_plan:.2f}s): {len(traj.segments)} segments, '
             f'T={traj.duration:.1f}s, v_peak={v_pk:.2f} m/s, a_peak={a_pk:.2f} m/s^2')
+        if dt_plan > 3.0:
+            self.get_logger().warn(
+                f'계획에 {dt_plan:.1f}초 걸렸다. 세그먼트({len(traj.segments)})가 많으면 '
+                f'급격히 느려진다 — laps 를 줄이거나 approach_dist 를 0 으로 두면 세그먼트가 1/3 이 된다.')
 
-        stamp = self.get_clock().now().to_msg()
         self.traj_pub = self.create_publisher(PolynomialTrajectory, '/adr/trajectory', LATCHED)
         self.path_pub = self.create_publisher(Path, '/adr/planned_path', LATCHED)
-        self.traj_pub.publish(trajectory_to_msg(traj, frame_id, stamp))
+        self._traj, self._frame_id = traj, frame_id
+        # 여기서 바로 발행하면 안 된다 — use_sim_time 일 때 /clock 은 아직 한 번도 안 들어왔고,
+        # get_clock().now() 가 0 을 준다. stamp=0 인 Path 는 rviz 가 TF 버퍼(기본 10 s)에서
+        # 조회에 실패해 **통째로 버린다** → 경로가 안 그려진다.
+        # gz 기동이 오래 걸리는 큰 맵일수록 sim 시각이 앞서 있어 확실히 재현된다
+        # (작은 맵은 sim 시각이 0 근처라 우연히 통과해서 '맵마다 된다/안 된다'로 보였다).
+        # 시계가 살아난 뒤 한 번만 발행하고 타이머를 끈다.
+        self._sent_traj = False
+        self._path_pts = None
+        self._pub_timer = self.create_timer(1.0, self._tick)
+
+    def _tick(self):
+        """궤적은 한 번만, 경로(rviz)는 1 Hz 로 계속 보낸다.
+
+        latched 라 원칙적으로 한 번이면 되지만, 그러면 타이밍에 휘둘린다:
+        stamp 가 sim 시각보다 한참 뒤처지면 rviz 가 TF 조회에 실패해 버리고,
+        구독 시점이 어긋나도 복구할 길이 없다. 1 Hz 재발행이면 언제 붙어도 1 초 안에 최신 stamp 가 간다.
+        궤적은 재발행하지 않는다 — 컨트롤러가 '비행 중 궤적 갱신은 무시함' 을 찍게 되므로.
+        """
+        if self.get_parameter('use_sim_time').value and self.get_clock().now().nanoseconds == 0:
+            return                                   # /clock 대기
+        stamp = self.get_clock().now().to_msg()
+        if not self._sent_traj:
+            self.traj_pub.publish(trajectory_to_msg(self._traj, self._frame_id, stamp))
+            self._path_pts = [(row[1:4], row[10])
+                              for row in self._traj.sample_all(float(self.get_parameter('path_dt').value))]
+            self._sent_traj = True
+            self.get_logger().info(f'궤적 발행 (stamp={stamp.sec}.{stamp.nanosec // 1000000:03d}), '
+                                   f'경로 {len(self._path_pts)} points 를 1 Hz 로 재발행')
 
         path = Path()
-        path.header.frame_id = frame_id
+        path.header.frame_id = self._frame_id
         path.header.stamp = stamp
-        for row in traj.sample_all(float(self.get_parameter('path_dt').value)):
+        for xyz, yaw in self._path_pts:
             ps = PoseStamped()
             ps.header = path.header
-            ps.pose.position.x, ps.pose.position.y, ps.pose.position.z = map(float, row[1:4])
+            ps.pose.position.x, ps.pose.position.y, ps.pose.position.z = map(float, xyz)
             (ps.pose.orientation.x, ps.pose.orientation.y,
-             ps.pose.orientation.z, ps.pose.orientation.w) = yaw_to_quat(row[10])
+             ps.pose.orientation.z, ps.pose.orientation.w) = yaw_to_quat(yaw)
             path.poses.append(ps)
         self.path_pub.publish(path)
 

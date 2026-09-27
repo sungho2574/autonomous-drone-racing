@@ -95,3 +95,27 @@ def test_course_file_plan():
 def test_bad_input():
     with pytest.raises(ValueError):
         plan(np.zeros((1, 3)), np.zeros(1))
+
+
+def test_scales_to_many_segments():
+    """세그먼트가 많아도 계획이 빨라야 한다 — 희소 KKT 풀이의 회귀 감지용.
+
+    예전 dense SVD 풀이는 O((8N)³) 이라 361 세그먼트(big_track 10바퀴)에 **약 4분** 걸렸다.
+    그동안 gate_planner 가 노드 등록조차 못 해서, 겉보기엔 '경로도 비행도 안 되는' 고장이었다.
+    희소 KKT 로 바꾼 뒤 같은 문제가 0.8 초다. 여기서 크게 느려지면 그 풀이가 되돌아간 것이다.
+    """
+    import time
+    n = 200
+    wp = np.zeros((n + 1, 3))
+    wp[:, 0] = np.arange(n + 1) * 1.5
+    wp[:, 1] = np.sin(np.arange(n + 1) * 0.3) * 2.0
+    wp[:, 2] = 1.5
+    yaw = np.zeros(n + 1)
+    t0 = time.time()
+    tr = plan(wp, yaw, v_avg=3.0)
+    dt = time.time() - t0
+    assert len(tr.segments) == n
+    assert dt < 10.0, f'{n} 세그먼트 계획에 {dt:.1f}s — dense 풀이로 되돌아갔는지 확인할 것'
+    # 정확도도 같이 지킨다 (빠르지만 틀리면 의미 없다)
+    assert np.allclose(tr.sample(0.0)[0], wp[0], atol=1e-6)
+    assert np.allclose(tr.sample(tr.duration)[0], wp[-1], atol=1e-6)

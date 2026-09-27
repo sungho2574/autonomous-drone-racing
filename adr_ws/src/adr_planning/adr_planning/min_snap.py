@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from math import factorial
 
 import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
 
 ORDER = 7                 # 다항식 차수
 N_COEF = ORDER + 1
@@ -63,18 +65,18 @@ def solve_1d(waypoints: np.ndarray, durations: np.ndarray,
         raise ValueError('duration 은 양수여야 함')
 
     n_var = N_COEF * N
-    Q = np.zeros((n_var, n_var))
-    for i, T in enumerate(Ts):
-        sl = slice(i * N_COEF, (i + 1) * N_COEF)
-        Q[sl, sl] = _snap_cost(T)
+    Q = sparse.block_diag([_snap_cost(T) for T in Ts], format='csr')
 
-    rows, rhs = [], []
+    tri_r, tri_c, tri_v, rhs = [], [], [], []
 
     def add(row_blocks, b):
-        r = np.zeros(n_var)
+        """제약 한 줄을 COO 삼중항으로 쌓는다 (dense 행을 만들지 않는다)."""
+        r = len(rhs)
         for i, vec in row_blocks:
-            r[i * N_COEF:(i + 1) * N_COEF] += vec
-        rows.append(r)
+            base = i * N_COEF
+            for k, v in enumerate(vec):
+                if v != 0.0:
+                    tri_r.append(r); tri_c.append(base + k); tri_v.append(v)
         rhs.append(b)
 
     # 웨이포인트 통과
@@ -92,21 +94,21 @@ def solve_1d(waypoints: np.ndarray, durations: np.ndarray,
         for d in range(1, CONT_DERIVS + 1):
             add([(i, _tvec(1.0, d, Ts[i])), (i + 1, -_tvec(0.0, d, Ts[i + 1]))], 0.0)
 
-    A = np.vstack(rows)
+    # 등식제약 QP 를 **희소 KKT** 로 푼다.
+    #     min ½cᵀQc  s.t. Ac = b   →   [[Q, Aᵀ], [A, 0]] [c, λ]ᵀ = [0, b]ᵀ
+    # 예전에는 A 의 SVD 로 nullspace 를 구해 소거했는데, A 가 (m × 8N) dense 라
+    # SVD 가 O((8N)³) 이다. 세그먼트 361개(big_track 10바퀴)면 2888×2888 SVD 라
+    # **계획에만 4분**이 걸렸고, 그동안 노드가 등록조차 못 해 "멈춘 것처럼" 보였다.
+    # Q 는 블록대각, A 는 인접 세그먼트만 묶는 국소 제약이라 KKT 는 희소·밴드형이다.
+    # 계수는 tau∈[0,1] 로 정규화돼 있어 조건수가 좋으므로 KKT 직접 풀이로 충분하다.
+    A = sparse.coo_matrix((tri_v, (tri_r, tri_c)), shape=(len(rhs), n_var)).tocsr()
     b = np.asarray(rhs)
-    # 등식 제약을 nullspace 로 소거한 뒤 무제약 QP 를 푼다 (KKT 직접 풀이보다 조건수에 강함).
-    #   c = c_p + Z u,  A c_p = b,  A Z = 0  →  u* = -(ZᵀQZ)⁻¹ ZᵀQ c_p
-    c_p, *_ = np.linalg.lstsq(A, b, rcond=None)
-    _, sv, vt = np.linalg.svd(A)
-    rank = int((sv > sv.max() * 1e-12).sum())
-    Z = vt[rank:].T
-    if Z.shape[1] > 0:
-        H = Z.T @ Q @ Z
-        g = Z.T @ Q @ c_p
-        u = -np.linalg.solve(H, g)
-        c = c_p + Z @ u
-    else:
-        c = c_p
+    KKT = sparse.bmat([[Q, A.T], [A, None]], format='csc')
+    sol = spsolve(KKT, np.concatenate([np.zeros(n_var), b]))
+    if not np.all(np.isfinite(sol)):
+        raise RuntimeError('min-snap KKT 풀이 실패 (특이 행렬) — duration 이 0 이거나 '
+                           '웨이포인트가 중복되지 않았는지 확인할 것')
+    c = sol[:n_var]
     return c.reshape(N, N_COEF)
 
 

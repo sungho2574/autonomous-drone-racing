@@ -13,11 +13,42 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, LogInfo,
+                            OpaqueFunction)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
 from launch_ros.actions import Node
+
+from adr_bringup.launch_cleanup import kill_stale
+
+
+def _stale_patterns():
+    """step1 이 띄우는 노드들만. sim.launch.py 가 띄우는 것(gz·PX4·gz_bridge·gate_markers·rviz)은
+    건드리지 않는다 — T1 은 보통 계속 띄워 둔 채 T2 만 다시 돌리기 때문이다.
+
+    imu_bridge 는 sim 쪽 gz_bridge 와 같은 parameter_bridge 실행파일이라
+    반드시 `__node:=imu_bridge` 로 좁혀야 한다. 안 그러면 T1 의 브릿지까지 죽는다.
+    """
+    return [
+        (r'adr_planning/gate_planner', 'gate_planner'),
+        (r'adr_control/px4_position_controller', 'px4_position_controller'),
+        (r'adr_perception/gate_detector', 'gate_detector'),
+        (r'adr_perception/gate_pnp', 'gate_pnp'),
+        (r'adr_state_estimation/drift_corrector', 'drift_corrector'),
+        (r'adr_vio/vio_align', 'vio_align'),
+        (r'ov_msckf/run_subscribe_msckf', 'ov_msckf'),
+        (r'parameter_bridge.*__node:=imu_bridge', 'imu_bridge'),
+    ]
+
+
+def _cleanup(context, *args, **kwargs):
+    """다른 무엇보다 **먼저** 실행돼야 한다 — 우리 노드가 뜬 뒤에 돌면 그걸 죽인다.
+    종료 시에는 하지 않는다(이유는 adr_bringup/launch_cleanup.py 주석)."""
+    killed = kill_stale(_stale_patterns())
+    if killed:
+        return [LogInfo(msg=f'[cleanup] 이전 실행 잔재 정리: {", ".join(killed)}')]
+    return []
 
 
 def generate_launch_description():
@@ -48,6 +79,11 @@ def generate_launch_description():
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
         DeclareLaunchArgument('v_avg', default_value='3.0'),
         DeclareLaunchArgument('a_max', default_value='8.0'),
+
+        # ---- 이전 실행 잔재 정리. 반드시 우리 노드를 띄우기 전에! ----
+        # 고아 노드가 남으면 latched 토픽(/adr/trajectory, /adr/planned_path)의 퍼블리셔가 둘이 되어
+        # rviz·컨트롤러가 낡은 샘플을 물고, 경로가 '떴다 안 떴다' 한다.
+        OpaqueFunction(function=_cleanup),
 
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
              parameters=[os.path.join(bringup_share, 'config', 'planner.yaml'),
