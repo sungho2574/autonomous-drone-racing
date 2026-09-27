@@ -12,12 +12,15 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     bringup_share = get_package_share_directory('adr_bringup')
+    gates_file = PathJoinSubstitution([
+        bringup_share, 'config', 'maps',
+        [LaunchConfiguration('map'), TextSubstitution(text='.yaml')]])
     return LaunchDescription([
         DeclareLaunchArgument('rigid_body', default_value='adr_racer'),
         DeclareLaunchArgument('source', default_value='poses'),
@@ -28,8 +31,7 @@ def generate_launch_description():
              parameters=[{'rigid_body_name': LaunchConfiguration('rigid_body'),
                           'source': LaunchConfiguration('source')}], output='screen'),
         Node(package='adr_bringup', executable='gate_markers', name='gate_markers',
-             parameters=[{'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
-                                         LaunchConfiguration('map'), '.yaml']}], output='screen'),
+             parameters=[{'gates_file': gates_file}], output='screen'),
         Node(package='adr_bringup', executable='px4_odom_to_tf', name='px4_odom_to_tf', output='screen'),
         Node(package='rviz2', executable='rviz2', name='rviz2',
              arguments=['-d', os.path.join(bringup_share, 'config', 'adr.rviz')],

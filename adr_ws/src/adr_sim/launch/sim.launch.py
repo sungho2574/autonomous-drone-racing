@@ -44,7 +44,8 @@ from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument, Ex
                             SetEnvironmentVariable)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PythonExpression
+from launch.substitutions import (EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution,
+                                  PythonExpression, TextSubstitution)
 from launch_ros.actions import Node
 
 SIM_SHARE = Path(get_package_share_directory('adr_sim'))
@@ -245,7 +246,8 @@ def generate_launch_description():
 
         # ---- 시각화 (adr_bringup 공통 노드) ----
         Node(package='adr_bringup', executable='gate_markers', name='gate_markers',
-             parameters=[{'gates_file': [str(MAPS) + '/', LaunchConfiguration('map'), '.yaml'],
+             parameters=[{'gates_file': PathJoinSubstitution(
+                 [str(MAPS), [LaunchConfiguration('map'), TextSubstitution(text='.yaml')]]),
                           **sim_time}], output='screen'),
         Node(package='adr_bringup', executable='px4_odom_to_tf', name='px4_odom_to_tf',
              parameters=[sim_time], output='screen'),

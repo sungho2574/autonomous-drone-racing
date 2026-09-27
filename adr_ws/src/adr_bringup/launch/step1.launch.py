@@ -3,6 +3,8 @@
 선행: ros2 launch adr_sim sim.launch.py (gz+PX4+Agent+rviz 일괄) 또는 real.launch.py
 인자: map:=cross   비행할 맵 = adr_bringup/config/maps/<맵>.yaml. **sim.launch.py 의 map 과 같아야 한다**
       laps:=2  time_scale:=1.0  land_after:=true  perception:=true  pnp:=true  use_sim_time:=true
+      v_avg:=3.0  a_max:=8.0   궤적 공격성(planner.yaml 기본값 덮어쓰기). a_max 가 클수록 기울기가 커지는데
+                              PX4 MPC_TILTMAX_AIR(기본 45°) 를 넘으면 세트포인트를 못 따라간다
       origin_mode:=world|start  (PX4 local 원점이 map 과 다를 때 = GPS 시뮬 모드(ev:=false) 면 start)
       vio:=true|false           OpenVINS VIO + drift 보정 KF (기본 true). OpenVINS 미설치면 launch 가 멈추며
                                 설치 절차를 안내한다. 끄려면 vio:=false
@@ -14,12 +16,17 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     bringup_share = get_package_share_directory('adr_bringup')
+    # map:= → config/maps/<맵>.yaml. PathJoinSubstitution 은 Substitution 하나로 평가되므로
+    # 파라미터가 문자열 배열로 잘못 해석될 여지가 없다.
+    gates_file = PathJoinSubstitution([
+        bringup_share, 'config', 'maps',
+        [LaunchConfiguration('map'), TextSubstitution(text='.yaml')]])
     control_share = get_package_share_directory('adr_control')
     sim_time = {'use_sim_time': LaunchConfiguration('use_sim_time')}
 
@@ -38,12 +45,16 @@ def generate_launch_description():
         DeclareLaunchArgument('vio', default_value='true'),
         # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
         DeclareLaunchArgument('map', default_value='cross'),
+        # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
+        DeclareLaunchArgument('v_avg', default_value='3.0'),
+        DeclareLaunchArgument('a_max', default_value='8.0'),
 
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
              parameters=[os.path.join(bringup_share, 'config', 'planner.yaml'),
                          {'laps': LaunchConfiguration('laps'),
-                          'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
-                                         LaunchConfiguration('map'), '.yaml'],
+                          'v_avg': LaunchConfiguration('v_avg'),
+                          'a_max': LaunchConfiguration('a_max'),
+                          'gates_file': gates_file,
                           **sim_time}],
              output='screen'),
         Node(package='adr_control', executable='px4_position_controller', name='px4_position_controller',
@@ -52,8 +63,7 @@ def generate_launch_description():
                           'land_after': LaunchConfiguration('land_after'),
                           'origin_mode': LaunchConfiguration('origin_mode'),
                           # origin_mode=start 일 때 start 좌표를 여기서 읽는다 — planner 와 같은 맵이어야 한다
-                          'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
-                                         LaunchConfiguration('map'), '.yaml'],
+                          'gates_file': gates_file,
                           **sim_time}],
              output='screen'),
         Node(package='adr_perception', executable='gate_detector', name='gate_detector',
@@ -63,8 +73,7 @@ def generate_launch_description():
         # PnP 위치 추정 — 시각화/평가 전용. 제어에는 절대 안 들어간다 (TF pnp_base_link 로만 나감)
         Node(package='adr_perception', executable='gate_pnp', name='gate_pnp',
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_pnp.yaml'),
-                         {'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
-                                         LaunchConfiguration('map'), '.yaml']},
+                         {'gates_file': gates_file},
                          sim_time], condition=IfCondition(LaunchConfiguration('pnp')),
              output='screen'),
         # VIO drift 보정 (논문 §2.4 KF) — VIO + 게이트 PnP → /adr/state/corrected.
