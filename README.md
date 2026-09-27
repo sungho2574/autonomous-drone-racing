@@ -121,31 +121,73 @@ ros2 launch adr_bringup step1.launch.py laps:=2 vio:=false
 rviz 의 하늘색 `VioPath` 가 VIO 궤적, 빨간 `FlownPath` 가 실제다. 특징점 추적 영상은
 `ros2 run rqt_image_view rqt_image_view /adr/vio/debug_image` — **볼 때만** 그려진다.
 
-### 맵 바꾸기
+### 맵 (코스) 바꾸기
 
-맵 하나 = `adr_ws/src/adr_bringup/config/maps/<맵>.yaml` 하나. 두 launch 에 같은 `map:=` 을 준다:
+**맵 하나 = yaml 파일 하나**, 저장 위치는 여기다:
 
-```bash
-ros2 launch adr_sim sim.launch.py       map:=figure8    # T1
-ros2 launch adr_bringup step1.launch.py map:=figure8    # T2
+```
+adr_ws/src/adr_bringup/config/maps/
+├── cross.yaml          # 십자 4게이트 원형 (기본값)
+├── figure8.yaml        # 8자, 게이트 8개
+├── inverted_loop.yaml  # SkyDreamer 논문 Fig 6  — 게이트 3
+├── ladder_loop.yaml    # SkyDreamer 논문 Fig 4·5 — 게이트 5
+└── big_track.yaml      # SkyDreamer 논문 Fig 9  — 게이트 12, 약 23×13 m
 ```
 
-기본 제공:
+이 파일이 코스의 단일 진실 원천이고 `gate_planner`(궤적) · `gate_markers`(rviz) · `gate_pnp`(게이트 위치) ·
+`gen_world.py`(gz 월드) 가 전부 여기서 읽는다.
 
-| 맵 | 내용 | step1 비행 |
-|---|---|---|
-| `cross` | 십자 4게이트 원형 (기본값) | ✅ |
-| `figure8` | 8자, 게이트 8개 | ✅ |
-| `inverted_loop` · `ladder_loop` · `big_track` | SkyDreamer 논문 트랙 (NED→ENU 변환) | ❌ split-S·ladder 가 들어가 position control 로는 못 난다. step2 용 기하 + 배치 확인용 |
-
-새 맵은 `cross.yaml` 을 복사해 `gates` / `start` 만 고치고 월드를 한 번 생성하면 된다:
+**맵 이름 = gz 월드 이름 = `adr_sim/assets/worlds/<맵>.sdf`** 로 맞춰 놨기 때문에, 기존 launch 3개 모두
+**`map:=<맵 이름>` 인자 하나**로 고른다 (확장자·경로 없이 이름만, 기본값 `cross`):
 
 ```bash
-python3 adr_ws/src/adr_sim/scripts/gen_world.py --map mymap   # 전부 다시: --all
+ros2 launch adr_sim sim.launch.py       map:=big_track   # T1 — gz 월드 + PX4 + rviz
+ros2 launch adr_bringup step1.launch.py map:=big_track   # T2 — 계획 + 제어
+ros2 launch adr_bringup real.launch.py  map:=big_track   # 실기체(mocap) 쪽 rviz
 ```
 
-배경 장애물은 게이트 배치에서 자동으로 코스 밖에 둘러지므로 맵마다 배치할 일은 없다.
-자세한 내용은 [docs §4](docs/step1_architecture.md#4-코스-정의--맵-configmapsyaml).
+`map:=` 하나가 gz 월드 · `PX4_GZ_WORLD` · 게이트 마커 · min-snap 웨이포인트 · PnP 게이트 · 컨트롤러의
+`start` · VIO 의 gz IMU 토픽 경로까지 전부 따라간다. 배치만 보고 싶으면 T1 만 띄우면 된다
+(`ros2 launch adr_sim sim.launch.py map:=big_track` → gz + rviz 에 게이트가 그려진다).
+
+> ⚠️ **T1 과 T2 의 `map` 이 다르면 에러 없이** 월드와 게이트 좌표만 조용히 어긋난다.
+> 각 터미널의 `[map]` 로그 줄을 비교할 것.
+
+궤적만 ROS 없이 그려 보려면:
+
+```bash
+cd adr_ws/src/adr_planning
+python3 -m adr_planning.plot_trajectory --gates ../adr_bringup/config/maps/big_track.yaml --laps 1
+```
+
+#### 맵 목록과 비행 가능 여부
+
+| 맵 | 게이트 | 내용 | step1 비행 |
+|---|---|---|---|
+| `cross` | 4 | 십자 배치 원형 코스 (기본값) | ✅ |
+| `figure8` | 8 | 원점에서 교차하는 8자 | ✅ |
+| `inverted_loop` | 3 | 논문 Fig 6 / Table IV "Loop" | ❌ |
+| `ladder_loop` | 5 | 논문 Fig 4·5 / Table IV "Ladder loop" | ❌ |
+| `big_track` | 12 | 논문 Fig 9, 약 23×13 m 타원형 | ❌ |
+
+❌ 세 맵은 **step1 으로 날릴 수 없다.** split-S(뒤집기)·ladder(360° 선회)를 PX4 position control 이 못 하고,
+그 전에 min-snap 이 4.05 m 가상 게이트에서 1.35 m 실제 게이트로 내려오는 구간에서 **바닥 0.12~0.16 m 까지
+내려찍는다**. step 2 의 RL/CTBR 용 코스 기하이므로 T1 만 띄워 배치를 보는 용도다
+(`big_track` 은 코스가 커서 VIO/인식용 큰 월드로는 쓸 만하다). 자세한 내용은
+[docs §4](docs/step1_architecture.md#4-코스-정의--맵-configmapsyaml).
+
+#### 새 맵 추가
+
+```bash
+cp adr_ws/src/adr_bringup/config/maps/cross.yaml adr_ws/src/adr_bringup/config/maps/mymap.yaml
+# gates / start 를 고친다
+python3 adr_ws/src/adr_sim/scripts/gen_world.py --map mymap   # gz 월드 생성 (전부: --all)
+colcon build --symlink-install --packages-select adr_bringup adr_sim
+```
+
+그 다음부터는 `map:=mymap` 만 붙이면 된다. 배경 장애물은 게이트 배치에서 자동으로 코스 밖에 둘러지므로
+맵마다 배치할 일은 없고, 월드를 안 만들었거나 맵 yaml 보다 낡았으면 `sim.launch.py` 가 실행할 명령을
+알려주며 멈춘다.
 
 `sim.launch.py` 옵션: `ev:=false`(진실값 주입 대신 GPS 시뮬, airframe 4030 — 이때 T2 에 `origin_mode:=start` 필요) · `gui:=false`(headless) · `rviz:=false` · `soft_gl:=0`(GPU 있는 머신) · `agent:=micro-xrce-dds-agent`(snap 설치본) · `px4_dir:=...`
 
