@@ -3,7 +3,8 @@
 선행: ros2 launch adr_sim sim.launch.py (gz+PX4+Agent+rviz 일괄) 또는 real.launch.py
 인자: laps:=2  time_scale:=1.0  land_after:=true  perception:=true  pnp:=true  use_sim_time:=true
       origin_mode:=world|start  (PX4 local 원점이 map 과 다를 때 = GPS 시뮬 모드(ev:=false) 면 start)
-      vio:=true|false           OpenVINS VIO 같이 띄우기 (기본 false — 최초 1회 설치 필요, docs §13)
+      vio:=true|false           OpenVINS VIO + drift 보정 KF (기본 true). OpenVINS 미설치면 launch 가 멈추며
+                                설치 절차를 안내한다. 끄려면 vio:=false
 """
 import os
 
@@ -29,9 +30,11 @@ def generate_launch_description():
         DeclareLaunchArgument('perception', default_value='true'),
         DeclareLaunchArgument('pnp', default_value='true'),
         DeclareLaunchArgument('origin_mode', default_value='world'),
-        # VIO 는 기본 꺼둔다 — OpenVINS 를 따로 받아 빌드해야 하고(docs §13.1), CPU 도 꽤 먹는다.
-        # 켜져 있는데 ov_msckf 가 없으면 이 launch 전체가 에러와 함께 멈춘다(조용히 넘어가지 않는다).
-        DeclareLaunchArgument('vio', default_value='false'),
+        # VIO(OpenVINS) + drift 보정 KF. 기본 켬.
+        # OpenVINS 가 설치돼 있지 않으면 이 launch 전체가 **에러와 함께 멈춘다**(조용히 넘어가지 않는다).
+        # 그 에러 메시지가 설치 절차를 안내하므로 그대로 두는 편이 낫다 — adr_vio/launch/vio.launch.py 참고.
+        # CPU 가 부족하거나 VIO 가 필요 없으면 vio:=false.
+        DeclareLaunchArgument('vio', default_value='true'),
         DeclareLaunchArgument('world', default_value='adr_cross'),   # vio 의 gz IMU 토픽 경로용
 
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
@@ -52,6 +55,13 @@ def generate_launch_description():
         Node(package='adr_perception', executable='gate_pnp', name='gate_pnp',
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_pnp.yaml'),
                          sim_time], condition=IfCondition(LaunchConfiguration('pnp')),
+             output='screen'),
+        # VIO drift 보정 (논문 §2.4 KF) — VIO + 게이트 PnP → /adr/state/corrected.
+        # vio:=true 일 때만 의미가 있다(VIO 가 있어야 보정할 대상이 있음). 제어에는 미반영.
+        Node(package='adr_state_estimation', executable='drift_corrector', name='drift_corrector',
+             parameters=[os.path.join(get_package_share_directory('adr_state_estimation'),
+                                      'config', 'drift_corrector.yaml'), sim_time],
+             condition=IfCondition(LaunchConfiguration('vio')),
              output='screen'),
         # VIO (선택) — 제어에는 안 들어간다. sim 이면 gz IMU 브릿지도 같이 뜬다.
         IncludeLaunchDescription(

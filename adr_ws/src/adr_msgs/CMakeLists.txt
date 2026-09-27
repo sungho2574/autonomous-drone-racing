@@ -13,6 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/GateArray.msg"
   "msg/GateDetection.msg"
   "msg/GateDetectionArray.msg"
+  "msg/GatePnP.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

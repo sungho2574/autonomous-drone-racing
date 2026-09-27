@@ -53,13 +53,25 @@ Visualization Manager:
       Value: true
     # VIO(OpenVINS) 궤적. adr_vio/vio_align 이 map 에 정렬해서 낸다 (vio.launch.py 를 띄웠을 때만).
     # 빨간 FlownPath(실제) 와 겹쳐 보면 drift 가 보인다.
+    # 쌩 VIO: 연하게. 아래 CorrectedPath(진한 같은 계열)와 겹쳐 보면 보정량이 바로 읽힌다.
     - Class: rviz_default_plugins/Path
-      Name: VioPath
+      Name: VioPath (raw)
       Enabled: true
-      Color: 0; 170; 255
+      Alpha: 0.35
+      Color: 150; 215; 240
       Line Style: Lines
       Topic:
         Value: /adr/vio/path
+      Value: true
+    # 게이트 PnP 로 drift 보정한 결과 (논문 §2.4 KF). 계측용 — 제어에는 안 들어간다.
+    - Class: rviz_default_plugins/Path
+      Name: CorrectedPath
+      Enabled: true
+      Alpha: 1.0
+      Color: 0; 130; 220
+      Line Style: Lines
+      Topic:
+        Value: /adr/state/corrected_path
       Value: true
     # OpenVINS 가 잡은 SLAM 특징점. vio_align 의 TF map→global 덕에 같은 화면에 뜬다.
     - Class: rviz_default_plugins/PointCloud2

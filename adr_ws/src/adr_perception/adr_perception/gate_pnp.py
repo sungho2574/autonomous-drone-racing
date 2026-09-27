@@ -2,6 +2,7 @@
 
     /adr/gate_detections (코너) + /adr/camera/camera_info (내부파라미터) + gates.yaml (맵)
       → solvePnP → /adr/pnp/marks (추정 위치마다 파란 X 표시)
+                   + /adr/pnp/gate (GatePnP — drift 보정 KF 의 측정값)
                    + /adr/pnp/pose, /adr/pnp/target_gate, /adr/pnp/error
 
 **제어에는 전혀 쓰이지 않는다.** PnP 가 얼마나 쓸 만한지 눈으로 보고 숫자로 재기 위한 계측용이다.
@@ -25,6 +26,7 @@ import os
 import numpy as np
 import rclpy
 from adr_msgs.msg import GateDetectionArray
+from adr_msgs.msg import GatePnP as GatePnPMsg   # 아래 노드 클래스와 이름이 같아 별칭
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import Odometry
@@ -57,6 +59,10 @@ class GatePnP(Node):
         # 오도메트리와 이만큼 넘게 벌어지면 '다른 게이트를 본 것'으로 보고 버린다.
         # PnP 오차(수십 cm)보다 훨씬 크게 잡아 성능 측정을 왜곡하지 않게 한다. 0 이면 끔.
         self.declare_parameter('max_odom_gap', 5.0)
+        # quality 산출용 거리 구간 (논문 §2.3 의 거리 필터 τ_d_min/τ_d_max 와 같은 의미).
+        # 논문 값은 1~13 m 지만 그건 실외 대형 트랙 기준이다. 이 코스는 반경 4 m 라 더 좁게 잡는다.
+        self.declare_parameter('quality_dist_min', 1.0)
+        self.declare_parameter('quality_dist_max', 8.0)
 
         gates_file = self.get_parameter('gates_file').value or os.path.join(
             get_package_share_directory('adr_bringup'), 'config', 'gates.yaml')
@@ -66,6 +72,8 @@ class GatePnP(Node):
                                            float(self.get_parameter('cam_tilt_deg').value))
         self.max_reproj = float(self.get_parameter('max_reproj_px').value)
         self.max_gap = float(self.get_parameter('max_odom_gap').value)
+        self.d_min = float(self.get_parameter('quality_dist_min').value)
+        self.d_max = float(self.get_parameter('quality_dist_max').value)
 
         self.K = None
         self.D = None
@@ -79,6 +87,7 @@ class GatePnP(Node):
         self.mark_size = float(self.get_parameter('mark_size').value)
         self.marks = self._new_marker()
         self.marks_pub = self.create_publisher(Marker, '/adr/pnp/marks', 10)
+        self.gatepnp_pub = self.create_publisher(GatePnPMsg, '/adr/pnp/gate', 10)
         self.pose_pub = self.create_publisher(PoseStamped, '/adr/pnp/pose', 10)
         self.gate_pub = self.create_publisher(Int32, '/adr/pnp/target_gate', 10)
         self.err_pub = self.create_publisher(Float32, '/adr/pnp/error', 10)
@@ -162,6 +171,20 @@ class GatePnP(Node):
          ps.pose.orientation.z, ps.pose.orientation.w) = map(float, q)
         self.pose_pub.publish(ps)
         self.gate_pub.publish(Int32(data=int(g.id)))
+
+        # drift 보정 KF 용 측정값. 회전은 싣지 않는다 (논문 §2.2 — PnP 회전은 폐기).
+        # quality: 재투영오차와 거리 둘 다 좋을수록 1 에 가깝게. KF 가 R 스케일에 쓴다.
+        dist = float(np.linalg.norm(p - g.center))
+        q_rep = max(0.0, 1.0 - err / self.max_reproj) if self.max_reproj > 0 else 1.0
+        q_dist = float(np.clip((self.d_max - dist) / max(self.d_max - self.d_min, 1e-6), 0.0, 1.0))
+        m = GatePnPMsg()
+        m.header = ps.header
+        m.gate_id = int(g.id)
+        m.pos_w.x, m.pos_w.y, m.pos_w.z = map(float, p)
+        m.quality = float(np.clip(q_rep * q_dist, 0.0, 1.0))
+        m.reproj_px = float(err)
+        m.distance_m = dist
+        self.gatepnp_pub.publish(m)
 
         # 수평면 X 자. LINE_LIST 라 점 2개씩 선분이 되므로 대각선 2개 = 점 4개.
         # 비행이 대체로 수평이라 위/비스듬히서 볼 때 X 로 읽힌다.

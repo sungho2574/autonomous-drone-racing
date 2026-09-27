@@ -418,17 +418,17 @@ source install/setup.bash
 
 ### 13.2 실행
 
-터미널은 그대로 2개다. **step1 에 `vio:=true` 만 붙이면** bringup 이 VIO 까지 같이 띄운다.
+터미널은 그대로 2개다. step1 이 VIO(+ drift 보정 KF)까지 **기본으로** 같이 띄운다.
 
 ```bash
 # T1  시뮬 (gz + PX4 + 브릿지 + rviz)
 ros2 launch adr_sim sim.launch.py
-# T2  미션 + VIO (gz IMU 브릿지 + OpenVINS + 정렬/궤적이 따라 붙는다)
-ros2 launch adr_bringup step1.launch.py vio:=true
+# T2  미션 + VIO (gz IMU 브릿지 + OpenVINS + 정렬/궤적 + drift 보정이 따라 붙는다)
+ros2 launch adr_bringup step1.launch.py
 ```
 
-기본값이 `vio:=false` 인 이유: OpenVINS 는 따로 받아 빌드해야 하고(§13.1) CPU 도 꽤 먹는다.
-켰는데 `ov_msckf` 가 없으면 **launch 전체가 에러로 멈춘다** — 조용히 넘어가지 않는다.
+`ov_msckf` 가 없으면 **launch 전체가 에러로 멈춘다** — 조용히 넘어가지 않고 설치 절차를 안내한다.
+설치 전이거나 CPU 를 아끼려면 `vio:=false` 로 끈다.
 
 비행 없이 VIO 만 보고 싶으면 단독으로도 띄울 수 있다:
 
@@ -497,7 +497,7 @@ ros2 node list | grep ov_msckf               # 없으면 launch 터미널의 첫
 | 증상 | 원인 / 조치 |
 |---|---|
 | `ov_msckf 패키지를 찾을 수 없다` | 13.1 미수행(또는 `adr_ws/src/open_vins` 를 지웠다). `setup_openvins.sh` → colcon build → `source install/setup.bash` |
-| VIO 관련 토픽·노드가 **하나도** 없음 | `vio:=true` 를 안 붙였거나 `vio.launch.py` 를 안 띄운 것. `ros2 node list | grep -E 'vio_align|ov_msckf'` |
+| VIO 관련 토픽·노드가 **하나도** 없음 | `vio:=false` 로 껐는지 확인. `ros2 node list | grep -E 'vio_align|ov_msckf|drift_corrector'` |
 | `ov_msckf` 노드만 즉사 (다른 노드는 뜸) | 설정 파일 경로/형식, 토픽 이름 순으로 본다. launch 터미널의 첫 에러 줄이 이유를 찍는다 |
 | `/adr/imu` 가 없음 | `world` 인자가 `sim.launch.py` 와 달라 gz 토픽 경로가 틀린 것. `gz topic -l \| grep imu` 로 실제 이름 확인 |
 | VIO odometry 가 영영 안 나옴 | static 초기화가 안 걸린 것. 이륙 전 `init_window_time`(1 s) 이상 **정지**해 있어야 하고, 그 뒤 움직임이 `init_imu_thresh` 를 넘어야 한다. `verbosity:=DEBUG` 로 초기화 로그 확인 |

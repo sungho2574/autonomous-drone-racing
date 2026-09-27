@@ -1,0 +1,18 @@
+drift_corrector:
+  ros__parameters:
+    vio_topic: /adr/vio/odom        # vio_align 이 map 프레임으로 낸 순수 VIO
+    pnp_topic: /adr/pnp/gate        # gate_pnp 의 GatePnP (위치만, 회전은 버려져 있음)
+    reference_topic: /adr/odom      # 오차 리포트용 기준(sim=진실값, 실기체=mocap). 보정에는 안 쓴다
+    frame_id: map
+    # --- KF (논문 기본값) ---
+    sigma_p: 0.1                    # 위치 drift 프로세스 노이즈
+    sigma_v: 0.2                    # 속도 drift 프로세스 노이즈
+    lambda_r: 1.0                   # 측정 불확실성 스케일. 크게 하면 PnP 를 덜 믿는다
+    sigma_r: [0.25, 0.25, 0.25]     # PnP 위치 불확실성 [m]
+    # --- 논문 §2.3(a) 거리 필터. 논문 1~13 m 는 실외 대형 트랙 기준 ---
+    tau_d_min: 1.0
+    tau_d_max: 8.0
+    max_dt: 0.15                    # VIO↔PnP stamp 허용 차 [s]
+    hold_timeout: 2.5               # 측정이 이 시간 넘게 끊기면 등속 외삽 중단(발산 방지)
+    v_max: 0.5                      # drift 속도 상한 [m/s]
+    path_max_points: 6000

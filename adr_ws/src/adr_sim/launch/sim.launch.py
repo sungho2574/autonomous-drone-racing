@@ -22,10 +22,10 @@ PX4 기동 방식 (ARMS 의 px4_sitl.launch.py 와 같은 패턴, 셸 스크립�
   - 이전 실행 잔재(gz·PX4·브릿지)를 먼저 정리한 뒤, gz 는 ros_gz_sim 이 띄우고 PX4 는 standalone 으로 붙는다
     (PX4_GZ_STANDALONE=1, PX4_GZ_MODEL_NAME=adr_racer). 월드 clock 토픽이 보일 때까지 기다린 뒤 실행.
   - -d 데몬 모드라 pxh 셸이 없다. 명령은 build/px4_sitl_default/bin/px4-commander, px4-param 등 클라이언트로.
-  - Ctrl+C 시에도 같은 목록을 정리한다. gz 래퍼가 죽어도 'gz sim server' 는 살아남아 월드 이름을
-    계속 점유하고, 그러면 다음 실행이 /gazebo/starting_world 에서 멈춰 "가제보가 안 켜진다".
+  - 잔재 정리는 **기동 시에만** 한다. 종료 시엔 안 한다 — 패턴이 인스턴스를 구분 못 해서,
+    새 sim 을 띄우면 옛 launch 의 종료 핸들러가 새 sim 의 자식을 죽이는 연쇄가 생긴다.
     주의: gz server/gui 는 cmdline 에 월드 이름이 없어 스코프를 못 좁힌다 → 다른 gz 도 같이 죽는다.
-    (자세한 내용은 _stale_patterns 주석)
+    (자세한 내용은 _stale_patterns / 아래 종료 관련 주석)
 """
 import os
 import shutil
@@ -36,9 +36,8 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument, ExecuteProcess,
                             IncludeLaunchDescription, LogInfo, OpaqueFunction,
-                            RegisterEventHandler, SetEnvironmentVariable)
+                            SetEnvironmentVariable)
 from launch.conditions import IfCondition, UnlessCondition
-from launch.event_handlers import OnShutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
@@ -56,7 +55,7 @@ def _stale_patterns(world: str):
     gz sim 은 래퍼(`gz sim -r <world>`) 가 `gz sim server` / `gz sim gui` 를 자식으로 띄우는데,
     래퍼가 비정상 종료해도 **서버는 살아남아 월드 이름을 계속 점유한다**. 그 상태로 다시 띄우면
     새 서버가 /gazebo/starting_world 에서 멈추고 /world/<world>/clock 이 안 올라와,
-    겉보기엔 "가제보가 안 켜지는" 것처럼 보인다. → 기동 전·종료 시 모두 정리한다.
+    겉보기엔 "가제보가 안 켜지는" 것처럼 보인다. → **기동 전에만** 정리한다(종료 시엔 하지 않는다).
 
     `gz sim server` / `gz sim gui` 는 cmdline 에 월드 이름이 없어 스코프를 좁힐 수 없다.
     즉 **다른 프로젝트의 gz sim 도 같이 죽는다**. 이 워크스페이스는 한 번에 월드 하나만 쓰는
@@ -198,10 +197,12 @@ def generate_launch_description():
 
         # ---- PX4 SITL ----
         OpaqueFunction(function=_px4),
-        # Ctrl+C 시에도 정리. gz 래퍼가 먼저 죽으면 'gz sim server' 가 고아로 남아
-        # 다음 실행을 막으므로, 종료 경로에서도 같은 목록을 쓸어 준다.
-        RegisterEventHandler(OnShutdown(on_shutdown=lambda event, context: _kill_stale(
-            LaunchConfiguration('world').perform(context)))),
+        # 종료 시점에는 일부러 아무것도 쓸지 않는다.
+        # 예전에 OnShutdown 에서도 같은 패턴으로 pkill 했는데, 그게 연쇄 사고를 냈다:
+        #   새 sim 기동 → _cleanup 이 옛 sim 의 자식을 kill → 옛 launch 가 종료 절차 시작
+        #   → 그 OnShutdown 이 같은 패턴으로 pkill → **방금 뜬 새 sim** 의 자식을 죽인다.
+        # 패턴이 인스턴스를 구분하지 못하니 종료 경로에서 쓰면 안 된다.
+        # 고아가 남더라도 다음 실행의 _cleanup 이 정리하므로 기동 시 정리만으로 충분하다.
 
         # ---- gz ↔ ROS 브릿지 (clock, 카메라, 진실값) ----
         Node(package='ros_gz_bridge', executable='parameter_bridge', name='gz_bridge',

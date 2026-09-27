@@ -7,8 +7,10 @@
 이미지 기준 **시계방향 TL→TR→BR→BL** 로 정렬해 내보내므로 gate_pnp 가 그대로 solvePnP 에 쓴다.
 이미지 경계에 닿은 개구부(게이트를 통과하는 중)는 잘린 꼭짓점이라 has_corners=False 로 버린다.
 
-디버그 오버레이는 /adr/perception/debug_image 로 내되, **구독자가 있을 때만** 그린다:
-    ros2 run rqt_image_view rqt_image_view /adr/perception/debug_image
+디버그 출력 둘 다 **구독자가 있을 때만** 만든다 (평소 비용 0):
+    /adr/perception/debug_image  꼭짓점·bbox 오버레이
+    /adr/perception/mask_image   HSV 세그멘테이션 마스크 (mono8, 흰색 = 게이트)
+    ros2 run rqt_image_view rqt_image_view /adr/perception/mask_image
 
 step 3 에서는 이 자리를 Gatenet(코너 검출)으로 바꾼다. 출력 계약(코너 4점)은 그대로 두면 된다.
 HSV 범위는 sim 게이트 색(1.0, 0.45, 0.0 → H≈13, S·V 높음) 기준. 실기체 조명에 맞춰 파라미터로 조정.
@@ -30,6 +32,18 @@ SENSOR_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=Histo
 
 # approxPolyDP 의 epsilon 을 둘레의 이 비율만큼 키워 가며 4각형이 나오는 지점을 찾는다
 _EPS_FRACTIONS = (0.01, 0.015, 0.02, 0.03, 0.04, 0.06, 0.08)
+
+
+def mono8_to_imgmsg(gray: np.ndarray, header) -> Image:
+    """단일 채널 마스크 → sensor_msgs/Image(mono8). bgr8_to_imgmsg 와 같은 이유로 직접 채운다."""
+    msg = Image()
+    msg.header = header
+    msg.height, msg.width = gray.shape[0], gray.shape[1]
+    msg.encoding = 'mono8'
+    msg.is_bigendian = 0
+    msg.step = gray.shape[1]
+    msg.data = np.ascontiguousarray(gray, dtype=np.uint8).tobytes()
+    return msg
 
 
 def bgr8_to_imgmsg(bgr: np.ndarray, header) -> Image:
@@ -91,6 +105,7 @@ class GateDetector(Node):
         self.declare_parameter('border_margin', 3)              # 꼭짓점이 이 안쪽으로 들어오면 잘린 것으로 본다 [px]
         self.declare_parameter('min_corner_area', 400.0)        # PnP 에 쓸 개구부 최소 면적 [px^2]
         self.declare_parameter('debug_topic', '/adr/perception/debug_image')
+        self.declare_parameter('mask_topic', '/adr/perception/mask_image')
 
         self.lower = np.array(self.get_parameter('hsv_lower').value, dtype=np.uint8)
         self.upper = np.array(self.get_parameter('hsv_upper').value, dtype=np.uint8)
@@ -105,11 +120,13 @@ class GateDetector(Node):
         self.bridge = CvBridge()
         self.det_pub = self.create_publisher(GateDetectionArray, '/adr/gate_detections', 10)
         self.debug_pub = self.create_publisher(Image, self.get_parameter('debug_topic').value, SENSOR_QOS)
+        self.mask_pub = self.create_publisher(Image, self.get_parameter('mask_topic').value, SENSOR_QOS)
         self.create_subscription(Image, self.get_parameter('image_topic').value, self._on_image, SENSOR_QOS)
         self.n = 0
-        self.get_logger().info(f'gate_detector: HSV {self.lower.tolist()}~{self.upper.tolist()}, '
-                               f'개구부 4 꼭짓점 검출, debug → '
-                               f'{self.get_parameter("debug_topic").value} (구독자 있을 때만)')
+        self.get_logger().info(
+            f'gate_detector: HSV {self.lower.tolist()}~{self.upper.tolist()}, 개구부 4 꼭짓점 검출. '
+            f'구독자 있을 때만 → {self.get_parameter("debug_topic").value} (오버레이), '
+            f'{self.get_parameter("mask_topic").value} (세그멘테이션 마스크)')
 
     # ------------------------------------------------------------------
     def detect(self, bgr: np.ndarray):
@@ -167,7 +184,7 @@ class GateDetector(Node):
     def _on_image(self, msg: Image):
         self.n += 1
         bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        dets, _ = self.detect(bgr)
+        dets, mask = self.detect(bgr)
 
         arr = GateDetectionArray()
         arr.header = msg.header
@@ -186,6 +203,12 @@ class GateDetector(Node):
 
         if self.debug_pub.get_subscription_count() > 0:
             self.debug_pub.publish(bgr8_to_imgmsg(self._draw(bgr, dets, msg.width, msg.height), msg.header))
+
+        # 게이트 세그멘테이션(HSV 마스크) 원본. 흰색 = 게이트로 분류된 픽셀.
+        # 검출 로직이 실제로 보는 입력이라 HSV 임계값 튜닝에 이게 제일 직접적이다.
+        # 디버그 영상과 마찬가지로 **구독자가 있을 때만** 발행한다 (평소 비용 0).
+        if self.mask_pub.get_subscription_count() > 0:
+            self.mask_pub.publish(mono8_to_imgmsg(mask, msg.header))
 
         if self.n % 300 == 1:
             n_q = sum(len(d.corners) == 4 for d in dets)

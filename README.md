@@ -90,7 +90,7 @@ cd adr_ws && colcon build --symlink-install && source install/setup.bash
 ros2 pkg list | grep ov_        # ov_core ov_init ov_msckf 세 개가 나와야 한다
 ```
 
-안 하면 `vio:=true` 로 띄울 때 launch 가 설치 안내와 함께 멈춘다(그냥 비행만 할 거면 필요 없다).
+안 하면 step1 launch 가 설치 안내와 함께 멈춘다(그냥 비행만 할 거면 `vio:=false` 로 끄면 된다).
 
 ## 실행 (시뮬, 터미널 2개)
 
@@ -110,11 +110,12 @@ ros2 launch adr_sim sim.launch.py
 ros2 launch adr_bringup step1.launch.py laps:=2 time_scale:=1.0
 ```
 
-VIO(OpenVINS)로 위치 추정을 같이 재 보려면 T2 에 `vio:=true` 만 붙인다 — 터미널 수는 그대로 2개다.
-**단, 위 "OpenVINS" 설치가 먼저 돼 있어야 한다** ([docs §13](docs/step1_architecture.md#13-vio-openvins-로-위치-추정-재-보기)):
+위 명령은 VIO(OpenVINS) + drift 보정 KF 까지 **기본으로 같이 띄운다** — 터미널 수는 그대로 2개다.
+**단, 위 "OpenVINS" 설치가 먼저 돼 있어야 한다** ([docs §13](docs/step1_architecture.md#13-vio-openvins-로-위치-추정-재-보기)).
+설치가 안 됐거나 CPU 를 아끼고 싶으면 끌 수 있다:
 
 ```bash
-ros2 launch adr_bringup step1.launch.py laps:=2 vio:=true
+ros2 launch adr_bringup step1.launch.py laps:=2 vio:=false
 ```
 
 rviz 의 하늘색 `VioPath` 가 VIO 궤적, 빨간 `FlownPath` 가 실제다. 특징점 추적 영상은
@@ -134,8 +135,8 @@ PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙�
 | gz 가 `ign gazebo --force-version 6` 으로 뜸    | apt 의 Fortress 용 ros_gz 가 잡힘. Harmonic 워크스페이스를 먼저 source                                                                                     |
 | `Unknown message type [9]`                      | 위와 동일 (브릿지가 Fortress 판)                                                                                                                           |
 | PX4 가 `no autostart file found (…/4030_*)`     | `px4_dir` 가 잘못됐거나 `make px4_sitl` 미완료. launch 로그의 `[px4] … airframes→` 줄 확인                                                                 |
-| `vio:=true` 인데 `ov_msckf 패키지를 찾을 수 없다` | OpenVINS 미설치. 설치 절의 `setup_openvins.sh` → `colcon build` → `source install/setup.bash`. 워크스페이스를 밀면 매번 다시 받아야 한다 |
-| VIO 궤적·디버그 이미지가 아예 안 보임 | `vio:=true` 를 안 붙였다. `ros2 node list \| grep -E 'vio_align\|ov_msckf'` 로 확인 |
+| `ov_msckf 패키지를 찾을 수 없다` 며 launch 가 멈춤 | OpenVINS 미설치. 설치 절의 `setup_openvins.sh` → `colcon build` → `source install/setup.bash`. 워크스페이스를 밀면 매번 다시 받아야 한다 |
+| VIO 궤적·디버그 이미지가 아예 안 보임 | `vio:=false` 로 껐는지 확인. `ros2 node list \| grep -E 'vio_align\|ov_msckf\|drift_corrector'` |
 | PX4 가 `waiting for gz world` 에서 60 s 후 종료 | gz 서버가 안 떴거나 월드 이름 불일치. T1 로그 앞부분의 gz 에러 확인                                                                                        |
 
 자세한 내용은 [docs/step1_architecture.md](docs/step1_architecture.md).

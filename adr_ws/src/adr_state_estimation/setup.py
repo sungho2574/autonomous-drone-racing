@@ -3,7 +3,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'adr_video'
+package_name = 'adr_state_estimation'
 
 setup(
     name=package_name,
@@ -12,17 +12,16 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    description='카메라 영상 입력 (sim: ros_gz_bridge, 실기체: 드라이버 + relay)',
+    description='VIO drift 를 게이트 PnP 로 보정하는 KF (논문 §2.4). 시각화 전용',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'camera_relay = adr_video.camera_relay:main',
+            'drift_corrector = adr_state_estimation.drift_corrector:main',
         ],
     },
 )

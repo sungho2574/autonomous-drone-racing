@@ -8,3 +8,4 @@ gate_detector:
     morph_kernel: 3
     max_gates: 4
     debug_topic: /adr/perception/debug_image
+    mask_topic: /adr/perception/mask_image   # HSV 세그멘테이션 마스크 (mono8). 구독자 있을 때만 발행
