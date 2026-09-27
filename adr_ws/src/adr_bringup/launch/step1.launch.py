@@ -1,7 +1,8 @@
 """step1 파이프라인: gate_planner(min-snap) + px4_position_controller (+ perception, PnP, VIO).
 
 선행: ros2 launch adr_sim sim.launch.py (gz+PX4+Agent+rviz 일괄) 또는 real.launch.py
-인자: laps:=2  time_scale:=1.0  land_after:=true  perception:=true  pnp:=true  use_sim_time:=true
+인자: map:=cross   비행할 맵 = adr_bringup/config/maps/<맵>.yaml. **sim.launch.py 의 map 과 같아야 한다**
+      laps:=2  time_scale:=1.0  land_after:=true  perception:=true  pnp:=true  use_sim_time:=true
       origin_mode:=world|start  (PX4 local 원점이 map 과 다를 때 = GPS 시뮬 모드(ev:=false) 면 start)
       vio:=true|false           OpenVINS VIO + drift 보정 KF (기본 true). OpenVINS 미설치면 launch 가 멈추며
                                 설치 절차를 안내한다. 끄려면 vio:=false
@@ -35,17 +36,25 @@ def generate_launch_description():
         # 그 에러 메시지가 설치 절차를 안내하므로 그대로 두는 편이 낫다 — adr_vio/launch/vio.launch.py 참고.
         # CPU 가 부족하거나 VIO 가 필요 없으면 vio:=false.
         DeclareLaunchArgument('vio', default_value='true'),
-        DeclareLaunchArgument('world', default_value='adr_cross'),   # vio 의 gz IMU 토픽 경로용
+        # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
+        DeclareLaunchArgument('map', default_value='cross'),
 
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
              parameters=[os.path.join(bringup_share, 'config', 'planner.yaml'),
-                         {'laps': LaunchConfiguration('laps'), **sim_time}],
+                         {'laps': LaunchConfiguration('laps'),
+                          'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
+                                         LaunchConfiguration('map'), '.yaml'],
+                          **sim_time}],
              output='screen'),
         Node(package='adr_control', executable='px4_position_controller', name='px4_position_controller',
              parameters=[os.path.join(control_share, 'config', 'controller.yaml'),
                          {'time_scale': LaunchConfiguration('time_scale'),
                           'land_after': LaunchConfiguration('land_after'),
-                          'origin_mode': LaunchConfiguration('origin_mode'), **sim_time}],
+                          'origin_mode': LaunchConfiguration('origin_mode'),
+                          # origin_mode=start 일 때 start 좌표를 여기서 읽는다 — planner 와 같은 맵이어야 한다
+                          'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
+                                         LaunchConfiguration('map'), '.yaml'],
+                          **sim_time}],
              output='screen'),
         Node(package='adr_perception', executable='gate_detector', name='gate_detector',
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_detector.yaml'),
@@ -54,6 +63,8 @@ def generate_launch_description():
         # PnP 위치 추정 — 시각화/평가 전용. 제어에는 절대 안 들어간다 (TF pnp_base_link 로만 나감)
         Node(package='adr_perception', executable='gate_pnp', name='gate_pnp',
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_pnp.yaml'),
+                         {'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
+                                         LaunchConfiguration('map'), '.yaml']},
                          sim_time], condition=IfCondition(LaunchConfiguration('pnp')),
              output='screen'),
         # VIO drift 보정 (논문 §2.4 KF) — VIO + 게이트 PnP → /adr/state/corrected.
@@ -68,7 +79,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(
                 get_package_share_directory('adr_vio'), 'launch', 'vio.launch.py')),
             launch_arguments={'use_sim_time': LaunchConfiguration('use_sim_time'),
-                              'world': LaunchConfiguration('world'),
+                              'world': LaunchConfiguration('map'),
                               'imu_bridge': LaunchConfiguration('use_sim_time')}.items(),
             condition=IfCondition(LaunchConfiguration('vio'))),
     ])

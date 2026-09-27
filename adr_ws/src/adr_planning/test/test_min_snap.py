@@ -6,7 +6,7 @@ import pytest
 from adr_planning.course import course_waypoints, load_course
 from adr_planning.min_snap import Trajectory, plan
 
-GATES = os.path.join(os.path.dirname(__file__), '..', '..', 'adr_bringup', 'config', 'gates.yaml')
+GATES = os.path.join(os.path.dirname(__file__), '..', '..', 'adr_bringup', 'config', 'maps', 'cross.yaml')
 
 
 def _square():

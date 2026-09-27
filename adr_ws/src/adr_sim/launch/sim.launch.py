@@ -1,12 +1,18 @@
-"""시뮬 전체를 한 번에: gz Harmonic(adr_cross) + MicroXRCEAgent + PX4 SITL + ros_gz_bridge + rviz.
+"""시뮬 전체를 한 번에: gz Harmonic + MicroXRCEAgent + PX4 SITL + ros_gz_bridge + rviz.
 
-    ros2 launch adr_sim sim.launch.py [ev:=true] [gui:=false] [rviz:=false] [soft_gl:=0]
+    ros2 launch adr_sim sim.launch.py [map:=cross] [ev:=true] [gui:=false] [rviz:=false] [soft_gl:=0]
 
-이후 별도 터미널에서 미션만:  ros2 launch adr_bringup step1.launch.py
+이후 별도 터미널에서 미션만:  ros2 launch adr_bringup step1.launch.py [map:=cross]
+(두 launch 의 map 은 같아야 한다 — 다르면 게이트 위치와 월드가 어긋난다)
 
 인자
+  map       : 맵 이름 = 월드 이름 = assets/worlds/<맵>.sdf (기본 cross).
+              맵 정의는 adr_bringup/config/maps/<맵>.yaml 하나뿐이고, gate_markers 도 이걸 읽는다.
+              새 맵을 추가했거나 맵 yaml 을 고쳤으면 먼저
+                python3 adr_ws/src/adr_sim/scripts/gen_world.py --map <맵>   (또는 --all)
+              을 돌려 월드를 만들어야 한다. 없으면 여기서 그 명령을 알려주며 멈춘다.
   ev        : true(기본) 면 airframe 4031 — gz 진실값을 외부 비전으로 주입(mocap 에뮬레이션).
-              PX4 local 프레임 == gz 월드 == map 이라 gates.yaml 좌표를 그대로 쓴다.
+              PX4 local 프레임 == gz 월드 == map 프레임이라 맵 yaml 좌표를 그대로 쓴다.
               false 면 4030(GPS 시뮬): local 원점이 부팅 위치가 되므로 step1.launch.py 에 origin_mode:=start 필요,
               자기장 편각 차이로 yaw 도 수 도 어긋난다. 실기체(mocap)와 같은 경로는 ev=true.
   gui       : gz GUI (false 면 headless -s)
@@ -14,7 +20,6 @@
   px4_dir   : PX4-Autopilot 위치 (기본 $PX4_DIR 또는 ~/PX4-Autopilot). make px4_sitl 이 끝나 있어야 함
   agent     : DDS 에이전트 실행 파일 (소스 빌드: MicroXRCEAgent, snap: micro-xrce-dds-agent)
   soft_gl   : 1 이면 llvmpipe 소프트웨어 렌더링 (GPU 없는 VM). 기본 $ADR_SOFT_GL 또는 1
-  world     : 월드 이름 (assets/worlds/<world>.sdf, <world name=...> 과 동일해야 함)
 
 PX4 기동 방식 (ARMS 의 px4_sitl.launch.py 와 같은 패턴, 셸 스크립트 없음)
   - assets/px4/airframes/* 를 매번 $PX4_DIR/build/px4_sitl_default/etc/init.d-posix/airframes/ 에 복사
@@ -47,6 +52,34 @@ ASSETS = SIM_SHARE / 'assets'
 MODEL_NAME = 'adr_racer'          # worlds/*.sdf 의 <include><name> 과 동일
 AGENT_PORT = '8888'               # uXRCE-DDS. 에이전트 실행과 잔재 정리 패턴이 같이 쓴다
 AIRFRAME = {'false': 4030, 'true': 4031}
+BRINGUP_SHARE = Path(get_package_share_directory('adr_bringup'))
+MAPS = BRINGUP_SHARE / 'config' / 'maps'
+
+
+def _gen_world_cmd(name: str) -> str:
+    return f'python3 <워크스페이스>/src/adr_sim/scripts/gen_world.py --map {name}   (전부: --all)'
+
+
+def _check_map(context, *args, **kwargs):
+    """맵 yaml 과 생성된 월드 SDF 가 둘 다 있는지, 월드가 맵보다 낡지 않았는지 본다.
+
+    gz 는 없는 월드를 줘도 조용히 빈 화면을 띄우고 /world/<맵>/clock 이 안 올라와
+    PX4 가 60 s 기다린 끝에 죽는다 — 그 전에 여기서 원인을 말하고 멈춘다.
+    """
+    name = LaunchConfiguration('map').perform(context)
+    installed = sorted(f.stem for f in MAPS.glob('*.yaml'))
+    mp, sdf = MAPS / f'{name}.yaml', ASSETS / 'worlds' / f'{name}.sdf'
+    if not mp.exists():
+        raise RuntimeError(f'맵 "{name}" 없음: {mp}\n'
+                           f'  설치된 맵: {", ".join(installed) or "(없음)"}\n'
+                           f'  config/maps/ 에 방금 추가했다면 colcon build 를 먼저 (share 로 설치돼야 보인다)')
+    if not sdf.exists():
+        raise RuntimeError(f'맵 "{name}" 의 월드가 아직 생성되지 않았다: {sdf}\n'
+                           f'  → {_gen_world_cmd(name)}\n  그 다음 colcon build')
+    if sdf.stat().st_mtime < mp.stat().st_mtime:
+        return [LogInfo(msg=f'[map] ⚠ {sdf.name} 이 {mp.name} 보다 낡았다 — 맵 수정이 반영되지 않았을 수 있다. '
+                            f'{_gen_world_cmd(name)}')]
+    return [LogInfo(msg=f'[map] {name}  (월드 {sdf}, 맵 {mp})')]
 
 
 def _stale_patterns(world: str):
@@ -95,7 +128,7 @@ def _kill_stale(world: str) -> list:
 
 def _cleanup(context, *args, **kwargs):
     """다른 무엇보다 **먼저** 실행돼야 한다 — 우리 gz 가 뜬 뒤에 돌면 그걸 죽인다."""
-    world = LaunchConfiguration('world').perform(context)
+    world = LaunchConfiguration('map').perform(context)
     killed = _kill_stale(world)
     if killed:
         return [LogInfo(msg=f'[cleanup] 이전 실행 잔재 정리: {", ".join(killed)}')]
@@ -104,7 +137,7 @@ def _cleanup(context, *args, **kwargs):
 
 def _px4(context, *args, **kwargs):
     px4_dir = Path(os.path.expanduser(LaunchConfiguration('px4_dir').perform(context)))
-    world = LaunchConfiguration('world').perform(context)
+    world = LaunchConfiguration('map').perform(context)
     ev = LaunchConfiguration('ev').perform(context).lower()
     autostart = AIRFRAME.get(ev, 4030)
 
@@ -151,10 +184,9 @@ def _px4(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    bringup_share = get_package_share_directory('adr_bringup')
     gz_launch = os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
 
-    world = LaunchConfiguration('world')
+    world = LaunchConfiguration('map')       # 월드 이름 == 맵 이름 == SDF 파일 이름
     gui = LaunchConfiguration('gui')
     rviz = LaunchConfiguration('rviz')
     agent = LaunchConfiguration('agent')
@@ -163,7 +195,7 @@ def generate_launch_description():
     sim_time = {'use_sim_time': True}
 
     return LaunchDescription([
-        DeclareLaunchArgument('world', default_value='adr_cross'),
+        DeclareLaunchArgument('map', default_value='cross'),
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('ev', default_value='true'),
@@ -172,6 +204,8 @@ def generate_launch_description():
         DeclareLaunchArgument('agent', default_value='MicroXRCEAgent'),
         DeclareLaunchArgument('soft_gl', default_value=EnvironmentVariable('ADR_SOFT_GL', default_value='1')),
 
+        # ---- 맵/월드 확인 (아무것도 띄우기 전에 원인을 알려주고 멈춘다) ----
+        OpaqueFunction(function=_check_map),
         # ---- 이전 실행 잔재 정리 (gz·PX4·브릿지). 반드시 gz 를 띄우기 전에! ----
         OpaqueFunction(function=_cleanup),
 
@@ -211,10 +245,11 @@ def generate_launch_description():
 
         # ---- 시각화 (adr_bringup 공통 노드) ----
         Node(package='adr_bringup', executable='gate_markers', name='gate_markers',
-             parameters=[sim_time], output='screen'),
+             parameters=[{'gates_file': [str(MAPS) + '/', LaunchConfiguration('map'), '.yaml'],
+                          **sim_time}], output='screen'),
         Node(package='adr_bringup', executable='px4_odom_to_tf', name='px4_odom_to_tf',
              parameters=[sim_time], output='screen'),
         Node(package='rviz2', executable='rviz2', name='rviz2',
-             arguments=['-d', os.path.join(bringup_share, 'config', 'adr.rviz')],
+             arguments=['-d', str(BRINGUP_SHARE / 'config' / 'adr.rviz')],
              parameters=[sim_time], condition=IfCondition(rviz), output='screen'),
     ])

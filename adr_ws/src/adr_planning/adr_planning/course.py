@@ -1,6 +1,6 @@
-"""gates.yaml 코스 정의 로드 및 웨이포인트 생성 (ROS 비의존).
+"""맵 yaml 코스 정의 로드 및 웨이포인트 생성 (ROS 비의존).
 
-gates.yaml 스키마 (adr_bringup/config/gates.yaml 참고):
+맵 yaml 스키마 (adr_bringup/config/maps/cross.yaml 참고):
   course: {radius, height, direction}      # 참고용 메타
   gate:   {inner_size, outer_size, thickness}
   start:  {x, y, takeoff_z}

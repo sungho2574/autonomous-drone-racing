@@ -8,7 +8,7 @@
   gate(G)    : 개구부 중심 원점. x_G = 이미지상 오른쪽, y_G = 위(=map +z), z_G = -법선(카메라 쪽)
                → ArUco/IPPE_SQUARE 관례와 같아서 objectPoints 를 그대로 쓸 수 있다
 
-게이트 yaw ψ (gates.yaml, ENU CCW, 통과 방향 법선 n = (cosψ, sinψ, 0)) 로부터
+게이트 yaw ψ (맵 yaml, ENU CCW, 통과 방향 법선 n = (cosψ, sinψ, 0)) 로부터
   x_G = ( sinψ, -cosψ, 0)      # 통과 방향을 바라볼 때의 오른쪽
   y_G = (0, 0, 1)
   z_G = x_G × y_G = (-cosψ, -sinψ, 0) = -n

@@ -14,7 +14,8 @@
 
 인자
   imu_bridge : gz IMU → /adr/imu 브릿지 실행 (sim 기본 true. 실기체는 FC/IMU 드라이버가 낸다)
-  world      : gz 월드 이름 (IMU gz 토픽 경로에 들어간다). sim.launch.py 와 같아야 한다
+  world      : gz 월드 이름 = 맵 이름 (IMU gz 토픽 경로에 들어간다). sim.launch.py 의 map 과 같아야 한다
+               (step1.launch.py 로 띄우면 거기의 map 이 그대로 넘어온다)
   config     : estimator_config.yaml 경로 (기본 adr_vio/config)
   align_mode : yaw | se3 | none  (vio_align 정렬 방식)
   verbosity  : OpenVINS 로그 레벨 (ALL/DEBUG/INFO/WARNING/ERROR/SILENT)
@@ -92,7 +93,7 @@ def _nodes(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        DeclareLaunchArgument('world', default_value='adr_cross'),
+        DeclareLaunchArgument('world', default_value='cross'),
         DeclareLaunchArgument('imu_bridge', default_value='true'),
         DeclareLaunchArgument('verbosity', default_value='INFO'),
         DeclareLaunchArgument('align_mode', default_value='yaw'),

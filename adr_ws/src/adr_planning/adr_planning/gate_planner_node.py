@@ -1,4 +1,4 @@
-"""gates.yaml → min-snap 궤적 → PolynomialTrajectory / nav_msgs/Path 발행.
+"""맵 yaml(config/maps/*.yaml) → min-snap 궤적 → PolynomialTrajectory / nav_msgs/Path 발행.
 
 한 번 계산해 transient_local 로 latch 하므로 컨트롤러가 나중에 떠도 받는다.
 """
@@ -56,8 +56,9 @@ class GatePlanner(Node):
         self.declare_parameter('path_dt', 0.05)
         self.declare_parameter('frame_id', 'map')
 
+        # 빈 값이면 기본 맵. launch 는 map:= 에서 이 경로를 만들어 넘긴다.
         gates_file = self.get_parameter('gates_file').value or os.path.join(
-            get_package_share_directory('adr_bringup'), 'config', 'gates.yaml')
+            get_package_share_directory('adr_bringup'), 'config', 'maps', 'cross.yaml')
         frame_id = self.get_parameter('frame_id').value
 
         course = load_course(gates_file)

@@ -233,7 +233,7 @@ def gen_airframe(s):
 . ${{R}}etc/init.d/rc.mc_defaults
 
 PX4_SIMULATOR=${{PX4_SIMULATOR:=gz}}
-PX4_GZ_WORLD=${{PX4_GZ_WORLD:=adr_cross}}
+PX4_GZ_WORLD=${{PX4_GZ_WORLD:=cross}}
 PX4_SIM_MODEL=${{PX4_SIM_MODEL:={s['name']}}}
 
 param set-default SIM_GZ_EN 1

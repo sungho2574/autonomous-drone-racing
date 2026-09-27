@@ -21,7 +21,7 @@ autonomous-drone-racing/
     ├── adr_perception/           # 게이트 인식 (주황 HSV 기반 2D 검출; step3: Gatenet + PnP)
     ├── adr_planning/             # min-snap 궤적 생성
     ├── adr_control/              # PX4 offboard 제어 (step1: position control)
-    ├── adr_bringup/              # 미션 launch(step1), 게이트 맵(gates.yaml), rviz 노드, mocap 브릿지
+    ├── adr_bringup/              # 미션 launch(step1), 게이트 맵(config/maps/*.yaml), rviz 노드, mocap 브릿지
     ├── adr_vio/                  # (선택) OpenVINS VIO — 설정 생성·map 정렬·rviz 궤적. 제어 미반영
     ├── px4_msgs/                 # submodule (release/1.16)
     └── motion_capture_tracking/  # submodule (Qualisys 등 mocap → /poses, TF)
@@ -121,6 +121,25 @@ ros2 launch adr_bringup step1.launch.py laps:=2 vio:=false
 rviz 의 하늘색 `VioPath` 가 VIO 궤적, 빨간 `FlownPath` 가 실제다. 특징점 추적 영상은
 `ros2 run rqt_image_view rqt_image_view /adr/vio/debug_image` — **볼 때만** 그려진다.
 
+### 맵 바꾸기
+
+맵 하나 = `adr_ws/src/adr_bringup/config/maps/<맵>.yaml` 하나. 두 launch 에 같은 `map:=` 을 준다:
+
+```bash
+ros2 launch adr_sim sim.launch.py       map:=figure8    # T1
+ros2 launch adr_bringup step1.launch.py map:=figure8    # T2
+```
+
+기본 제공: `cross`(십자 4게이트 원형, 기본값) · `figure8`(8자, 게이트 8개).
+새 맵은 `cross.yaml` 을 복사해 `gates` / `start` 만 고치고 월드를 한 번 생성하면 된다:
+
+```bash
+python3 adr_ws/src/adr_sim/scripts/gen_world.py --map mymap   # 전부 다시: --all
+```
+
+배경 장애물은 게이트 배치에서 자동으로 코스 밖에 둘러지므로 맵마다 배치할 일은 없다.
+자세한 내용은 [docs §4](docs/step1_architecture.md#4-코스-정의--맵-configmapsyaml).
+
 `sim.launch.py` 옵션: `ev:=false`(진실값 주입 대신 GPS 시뮬, airframe 4030 — 이때 T2 에 `origin_mode:=start` 필요) · `gui:=false`(headless) · `rviz:=false` · `soft_gl:=0`(GPU 있는 머신) · `agent:=micro-xrce-dds-agent`(snap 설치본) · `px4_dir:=...`
 
 PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙는다: `~/PX4-Autopilot/build/px4_sitl_default/bin/px4-commander check`, `px4-param set MPC_XY_VEL_MAX 5`.
@@ -138,5 +157,7 @@ PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙�
 | `ov_msckf 패키지를 찾을 수 없다` 며 launch 가 멈춤 | OpenVINS 미설치. 설치 절의 `setup_openvins.sh` → `colcon build` → `source install/setup.bash`. 워크스페이스를 밀면 매번 다시 받아야 한다 |
 | VIO 궤적·디버그 이미지가 아예 안 보임 | `vio:=false` 로 껐는지 확인. `ros2 node list \| grep -E 'vio_align\|ov_msckf\|drift_corrector'` |
 | PX4 가 `waiting for gz world` 에서 60 s 후 종료 | gz 서버가 안 떴거나 월드 이름 불일치. T1 로그 앞부분의 gz 에러 확인                                                                                        |
+| `맵 "..." 의 월드가 아직 생성되지 않았다` | 맵 yaml 만 만들고 월드를 안 만들었다. `gen_world.py --map <맵>` → `colcon build` |
+| 게이트가 rviz 와 gz 에서 다른 곳에 있음 | T1 과 T2 의 `map:=` 이 다르다. 두 터미널의 `[map]` 로그 줄을 비교할 것 |
 
 자세한 내용은 [docs/step1_architecture.md](docs/step1_architecture.md).

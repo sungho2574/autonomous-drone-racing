@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 자동 생성: adr_sim/scripts/gen_world.py (입력: adr_bringup/config/gates.yaml). 직접 수정하지 말 것. -->
+<!-- 자동 생성: adr_sim/scripts/gen_world.py (입력: adr_bringup/config/maps/cross.yaml). 직접 수정하지 말 것. -->
 <sdf version="1.9">
-  <world name="adr_cross">
+  <world name="cross">
     <!-- PX4 standalone 모드용 시스템 플러그인 (PX4 gz_bridge/server.config 와 동일 구성) -->
     <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
     <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
@@ -67,10 +67,10 @@
       </link>
     </model>
 
-    <!-- ===== 배경 장애물 (scene.yaml) — VIO 특징점용. 코스 바깥에만 둔다 ===== -->
+    <!-- ===== 배경 장애물 (scene.yaml) — VIO 특징점용. 코스 envelope 5.05 m 밖에만 둔다 ===== -->
     <model name="pole_0">
       <static>true</static>
-      <pose>7.219 0.749 1.421 0 0 0</pose>
+      <pose>7.269 0.754 1.421 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.841</length></cylinder></geometry>
@@ -87,7 +87,7 @@
     </model>
     <model name="pole_1">
       <static>true</static>
-      <pose>5.581 3.890 1.477 0 0 0</pose>
+      <pose>5.622 3.919 1.477 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.953</length></cylinder></geometry>
@@ -104,7 +104,7 @@
     </model>
     <model name="pole_2">
       <static>true</static>
-      <pose>4.031 6.033 1.618 0 0 0</pose>
+      <pose>4.059 6.075 1.618 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>3.237</length></cylinder></geometry>
@@ -121,7 +121,7 @@
     </model>
     <model name="pole_3">
       <static>true</static>
-      <pose>-0.688 7.370 1.310 0 0 0</pose>
+      <pose>-0.693 7.420 1.310 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.620</length></cylinder></geometry>
@@ -138,7 +138,7 @@
     </model>
     <model name="pole_4">
       <static>true</static>
-      <pose>-3.252 5.744 1.434 0 0 0</pose>
+      <pose>-3.277 5.787 1.434 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.868</length></cylinder></geometry>
@@ -155,7 +155,7 @@
     </model>
     <model name="pole_5">
       <static>true</static>
-      <pose>-6.353 3.727 1.260 0 0 0</pose>
+      <pose>-6.396 3.752 1.260 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.521</length></cylinder></geometry>
@@ -172,7 +172,7 @@
     </model>
     <model name="pole_6">
       <static>true</static>
-      <pose>-6.884 -0.454 1.825 0 0 0</pose>
+      <pose>-6.934 -0.458 1.825 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>3.650</length></cylinder></geometry>
@@ -189,7 +189,7 @@
     </model>
     <model name="pole_7">
       <static>true</static>
-      <pose>-5.434 -3.994 1.325 0 0 0</pose>
+      <pose>-5.474 -4.024 1.325 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.650</length></cylinder></geometry>
@@ -206,7 +206,7 @@
     </model>
     <model name="pole_8">
       <static>true</static>
-      <pose>-4.229 -6.155 1.803 0 0 0</pose>
+      <pose>-4.257 -6.196 1.803 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>3.606</length></cylinder></geometry>
@@ -223,7 +223,7 @@
     </model>
     <model name="pole_9">
       <static>true</static>
-      <pose>0.018 -7.433 1.109 0 0 0</pose>
+      <pose>0.018 -7.483 1.109 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>2.218</length></cylinder></geometry>
@@ -240,7 +240,7 @@
     </model>
     <model name="pole_10">
       <static>true</static>
-      <pose>4.079 -5.738 1.964 0 0 0</pose>
+      <pose>4.108 -5.779 1.964 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>3.928</length></cylinder></geometry>
@@ -257,7 +257,7 @@
     </model>
     <model name="pole_11">
       <static>true</static>
-      <pose>6.059 -3.269 1.576 0 0 0</pose>
+      <pose>6.103 -3.293 1.576 0 0 0</pose>
       <link name="link">
         <visual name="visual">
           <geometry><cylinder><radius>0.06</radius><length>3.151</length></cylinder></geometry>
@@ -274,7 +274,7 @@
     </model>
     <model name="box_0">
       <static>true</static>
-      <pose>-8.069 -6.915 1.008 0 0 1.450</pose>
+      <pose>-8.107 -6.948 1.008 0 0 1.450</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>0.972 0.508 2.015</size></box></geometry>
@@ -291,7 +291,7 @@
     </model>
     <model name="box_1">
       <static>true</static>
-      <pose>8.999 -4.722 0.526 0 0 1.334</pose>
+      <pose>9.043 -4.746 0.526 0 0 1.334</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>0.870 1.246 1.051</size></box></geometry>
@@ -308,7 +308,7 @@
     </model>
     <model name="box_2">
       <static>true</static>
-      <pose>9.809 -3.203 1.246 0 0 1.246</pose>
+      <pose>9.857 -3.219 1.246 0 0 1.246</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>0.941 1.192 2.493</size></box></geometry>
@@ -325,7 +325,7 @@
     </model>
     <model name="box_3">
       <static>true</static>
-      <pose>-10.482 0.895 0.981 0 0 0.346</pose>
+      <pose>-10.532 0.899 0.981 0 0 0.346</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>1.414 0.692 1.963</size></box></geometry>
@@ -342,7 +342,7 @@
     </model>
     <model name="box_4">
       <static>true</static>
-      <pose>3.381 -7.692 0.295 0 0 1.429</pose>
+      <pose>3.401 -7.738 0.295 0 0 1.429</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>0.576 1.237 0.590</size></box></geometry>
@@ -359,7 +359,7 @@
     </model>
     <model name="box_5">
       <static>true</static>
-      <pose>10.392 1.760 0.641 0 0 1.539</pose>
+      <pose>10.441 1.768 0.641 0 0 1.539</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>1.128 1.091 1.282</size></box></geometry>
@@ -376,7 +376,7 @@
     </model>
     <model name="box_6">
       <static>true</static>
-      <pose>8.479 -2.119 1.051 0 0 0.036</pose>
+      <pose>8.528 -2.131 1.051 0 0 0.036</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>0.549 0.653 2.101</size></box></geometry>
@@ -393,7 +393,7 @@
     </model>
     <model name="box_7">
       <static>true</static>
-      <pose>-0.553 8.866 0.430 0 0 0.062</pose>
+      <pose>-0.556 8.916 0.430 0 0 0.062</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>1.176 0.820 0.861</size></box></geometry>
@@ -410,7 +410,7 @@
     </model>
     <model name="box_8">
       <static>true</static>
-      <pose>2.952 8.961 1.168 0 0 1.056</pose>
+      <pose>2.967 9.008 1.168 0 0 1.056</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>1.278 1.406 2.337</size></box></geometry>
@@ -427,7 +427,7 @@
     </model>
     <model name="box_9">
       <static>true</static>
-      <pose>-5.090 -10.180 0.847 0 0 0.274</pose>
+      <pose>-5.113 -10.225 0.847 0 0 0.274</pose>
       <link name="link">
         <visual name="visual">
           <geometry><box><size>0.811 0.701 1.694</size></box></geometry>
@@ -450,24 +450,24 @@
       <pose>0 0 0 0 0 0</pose>
     </include>
 
-    <!-- ===== 게이트 4개 (gates.yaml) — 원점 = 개구부 중심, yaw = 통과 방향 ===== -->
+    <!-- ===== 게이트 4개 (cross.yaml) — 원점 = 개구부 중심, yaw = 통과 방향 ===== -->
     <include>
-      <uri>model://adr_gate</uri>
+      <uri>model://adr_gate_cross</uri>
       <name>gate_1</name>
       <pose>4.0 0.0 1.5 0 0 1.570796</pose>
     </include>
     <include>
-      <uri>model://adr_gate</uri>
+      <uri>model://adr_gate_cross</uri>
       <name>gate_2</name>
       <pose>0.0 4.0 1.5 0 0 3.141593</pose>
     </include>
     <include>
-      <uri>model://adr_gate</uri>
+      <uri>model://adr_gate_cross</uri>
       <name>gate_3</name>
       <pose>-4.0 0.0 1.5 0 0 4.712389</pose>
     </include>
     <include>
-      <uri>model://adr_gate</uri>
+      <uri>model://adr_gate_cross</uri>
       <name>gate_4</name>
       <pose>0.0 -4.0 1.5 0 0 0.000000</pose>
     </include>

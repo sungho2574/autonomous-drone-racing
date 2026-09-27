@@ -1,4 +1,4 @@
-"""gates.yaml 의 게이트를 rviz MarkerArray 로 그리고, PX4 odometry 로 실제 비행 궤적(Path)을 누적한다.
+"""맵 yaml(config/maps/*.yaml) 의 게이트를 rviz MarkerArray 로 그리고, PX4 odometry 로 실제 비행 궤적(Path)을 누적한다.
 
 발행
   /adr/gate_markers   visualization_msgs/MarkerArray (latched)  게이트 프레임(주황) + 법선 화살표 + id
@@ -40,8 +40,9 @@ class GateMarkers(Node):
         self.declare_parameter('path_rate', 10.0)
         self.declare_parameter('path_max_points', 6000)
 
+        # 빈 값이면 기본 맵. launch 는 map:= 에서 이 경로를 만들어 넘긴다.
         gates_file = self.get_parameter('gates_file').value or os.path.join(
-            get_package_share_directory('adr_bringup'), 'config', 'gates.yaml')
+            get_package_share_directory('adr_bringup'), 'config', 'maps', 'cross.yaml')
         self.frame_id = self.get_parameter('frame_id').value
         self.base_frame = self.get_parameter('base_frame').value
         self.course = load_course(gates_file)

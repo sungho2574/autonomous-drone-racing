@@ -17,7 +17,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    description='min-snap 궤적 생성 (step1). 웨이포인트 = 게이트 맵(gates.yaml)',
+    description='min-snap 궤적 생성 (step1). 웨이포인트 = 게이트 맵(adr_bringup/config/maps/*.yaml)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

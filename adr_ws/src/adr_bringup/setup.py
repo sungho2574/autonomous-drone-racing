@@ -13,11 +13,14 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*')),
+        # glob('config/*') 는 디렉터리(maps)도 잡아 setuptools 가 넘어가므로 파일만 고른다
+        (os.path.join('share', package_name, 'config'),
+         [f for f in glob('config/*') if os.path.isfile(f)]),
+        (os.path.join('share', package_name, 'config', 'maps'), glob('config/maps/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    description='통합 launch, 게이트 맵(gates.yaml), rviz 마커, PX4 odom→TF, mocap 브릿지',
+    description='통합 launch, 게이트 맵(config/maps/*.yaml), rviz 마커, PX4 odom→TF, mocap 브릿지',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

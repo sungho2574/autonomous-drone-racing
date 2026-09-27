@@ -1,6 +1,6 @@
-"""오프라인 확인용: gates.yaml 로 min-snap 을 풀어 matplotlib 로 그린다 (ROS 불필요).
+"""오프라인 확인용: 맵 yaml 로 min-snap 을 풀어 matplotlib 로 그린다 (ROS 불필요).
 
-    python3 -m adr_planning.plot_trajectory --gates ../adr_bringup/config/gates.yaml --laps 2
+    python3 -m adr_planning.plot_trajectory --gates ../adr_bringup/config/maps/cross.yaml --laps 2
 """
 import argparse
 

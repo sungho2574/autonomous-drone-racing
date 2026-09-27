@@ -1,6 +1,6 @@
 """게이트 개구부 4 꼭짓점 + 게이트 맵 → PnP 로 기체 위치 추정 → 궤적으로 시각화.
 
-    /adr/gate_detections (코너) + /adr/camera/camera_info (내부파라미터) + gates.yaml (맵)
+    /adr/gate_detections (코너) + /adr/camera/camera_info (내부파라미터) + 맵 yaml (게이트 위치)
       → solvePnP → /adr/pnp/marks (추정 위치마다 파란 X 표시)
                    + /adr/pnp/gate (GatePnP — drift 보정 KF 의 측정값)
                    + /adr/pnp/pose, /adr/pnp/target_gate, /adr/pnp/error
@@ -65,7 +65,7 @@ class GatePnP(Node):
         self.declare_parameter('quality_dist_max', 8.0)
 
         gates_file = self.get_parameter('gates_file').value or os.path.join(
-            get_package_share_directory('adr_bringup'), 'config', 'gates.yaml')
+            get_package_share_directory('adr_bringup'), 'config', 'maps', 'cross.yaml')
         self.course = load_course(gates_file)
         self.frame_id = self.get_parameter('frame_id').value
         self.T_base_opt = camera_extrinsic(self.get_parameter('cam_xyz').value,

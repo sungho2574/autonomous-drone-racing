@@ -8,7 +8,7 @@ arm / offboard 전환 / 상태 구독 / 세트포인트 발행처럼 컨트롤�
 
 map(월드) 원점 vs PX4 local 원점 (origin_mode 파라미터)
   - 'world' : PX4 local 프레임 == map. 외부 위치(EV: sim 진실값 / 실기체 mocap)로 EKF2 를 돌릴 때.
-  - 'start' : PX4 local 원점 = 기체가 부팅한 자리(GPS 시뮬 모드). 기체가 gates.yaml 의 start 에
+  - 'start' : PX4 local 원점 = 기체가 부팅한 자리(GPS 시뮬 모드). 기체가 맵 yaml 의 start 에
               놓여 있다고 보고, 이륙 전 정지 상태에서 offset = start − p_local 을 한 번 재서
               이후 모든 세트포인트/위치를 보정한다. 결과 offset 은 /adr/local_origin 으로 latched 발행
               → px4_odom_to_tf 가 같은 값으로 TF 를 보정한다.
@@ -109,7 +109,7 @@ class OffboardBase(Node):
         """이륙 전 정지 상태에서 호출. origin_mode 에 따라 map↔local offset 을 정하고 발행한다."""
         if self.origin_mode == 'start':
             gates_file = self.get_parameter('gates_file').value or os.path.join(
-                get_package_share_directory('adr_bringup'), 'config', 'gates.yaml')
+                get_package_share_directory('adr_bringup'), 'config', 'maps', 'cross.yaml')
             from adr_planning.course import load_course
             start = load_course(gates_file).start
             ground = np.array([start[0], start[1], 0.0])       # 이륙 전 = 바닥

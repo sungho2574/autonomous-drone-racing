@@ -5,7 +5,7 @@
 1. [목적과 범위](#1-목적과-범위)
 2. [노드 및 토픽 구조](#2-노드-및-토픽-구조)
 3. [좌표계와 규약](#3-좌표계와-규약)
-4. [코스 정의 (gates.yaml)](#4-코스-정의-gatesyaml)
+4. [코스 정의 — 맵 (config/maps/\*.yaml)](#4-코스-정의--맵-configmapsyaml)
 5. [min-snap 궤적 생성](#5-min-snap-궤적-생성)
 6. [PX4 offboard 제어](#6-px4-offboard-제어)
 7. [시뮬 자산: 드론 모델·게이트·월드·airframe](#7-시뮬-자산-드론-모델게이트월드airframe)
@@ -36,7 +36,7 @@ step 1 은 인식 없이 **알려진 게이트 맵**으로 한 바퀴를 도는 
 
 ```mermaid
 graph TD
-    GZ["Gazebo Harmonic<br/>(adr_cross.sdf, SITL)"]
+    GZ["Gazebo Harmonic<br/>(&lt;맵&gt;.sdf, SITL)"]
     MOCAP["Qualisys<br/>(motion_capture_tracking) 실기체"]
     USBCAM["/dev/video0<br/>(v4l2_camera) 실기체"]
 
@@ -57,7 +57,7 @@ graph TD
 
     DETECTED(["/adr/gate_detections"])
     DEBUG(["/adr/perception/debug_image<br/>(구독자 있을 때만)"])
-    GATES_YAML[("gates.yaml")]
+    GATES_YAML[("maps/&lt;맵&gt;.yaml")]
 
     subgraph adr_planning ["adr_planning"]
         PLAN["gate_planner<br/>(min-snap)"]
@@ -114,7 +114,7 @@ graph TD
     PX4 <-->|센서 / 모터 명령| GZ
 ```
 
-step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner → px4_position_controller → PX4** 한 줄이다.
+step 1 에서 실제로 동작하는 경로는 **맵 yaml → gate_planner → px4_position_controller → PX4** 한 줄이다.
 카메라·인식 경로는 돌아가지만 아직 제어에 쓰이지 않고(step 3 에서 PnP → 위치 추정에 결합), mocap 경로는 실기체 전용이다(sim 에서는 gz `OdometryPublisher` 가 같은 역할).
 `adr_vio`(OpenVINS)도 같은 뜻에서 **곁다리**다 — 같은 카메라·IMU 를 받아 따로 추정만 하고 제어에는 안 들어간다(§13).
 
@@ -122,7 +122,7 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 
 | 노드 | subscribe | publish |
 |---|---|---|
-| `gate_planner` | — (gates.yaml 파일) | `/adr/trajectory` (latched)<br/>`/adr/planned_path` |
+| `gate_planner` | — (맵 yaml 파일) | `/adr/trajectory` (latched)<br/>`/adr/planned_path` |
 | `px4_position_controller` | `/adr/trajectory`<br/>`/fmu/out/vehicle_local_position`<br/>`/fmu/out/vehicle_status` | `/fmu/in/offboard_control_mode` (50 Hz)<br/>`/fmu/in/trajectory_setpoint` (50 Hz)<br/>`/fmu/in/vehicle_command`<br/>`/adr/controller_state` |
 | `px4_odom_to_tf` | `/fmu/out/vehicle_odometry` | TF `map→base_link`<br/>`/adr/odom` |
 | `gate_markers` | TF `map→base_link` | `/adr/gate_markers`, `/adr/gates` (latched)<br/>`/adr/flown_path` |
@@ -140,7 +140,7 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 | 노드 | 패키지 | 역할 | 실행 환경 |
 |---|---|---|---|
 | `sim.launch.py` | `adr_sim` | gz 월드 + MicroXRCEAgent + PX4 SITL(airframe 주입, daemon) + ros_gz_bridge + 시각화를 한 번에 기동 | SITL |
-| `gate_planner` | `adr_planning` | `gates.yaml` 의 게이트 중심·전후 접근점을 웨이포인트로 min-snap 궤적을 한 번 풀어 latched 발행 | 공통 |
+| `gate_planner` | `adr_planning` | 맵 yaml 의 게이트 중심·전후 접근점을 웨이포인트로 min-snap 궤적을 한 번 풀어 latched 발행 | 공통 |
 | `px4_position_controller` | `adr_control` | 상태머신(warmup→arm→offboard→이륙→궤적 추종→hold→착륙). ENU 궤적을 NED `TrajectorySetpoint` 로 50 Hz 발행. step 2 RL 노드가 같은 `OffboardBase` 를 상속해 교체 | 공통 |
 | `px4_odom_to_tf` | `adr_bringup` | PX4 odometry(NED/FRD) → TF `map→base_link`(ENU/FLU) | 공통 |
 | `gate_markers` | `adr_bringup` | 게이트 프레임(CUBE)·법선·id 마커, 맵 기반 `GateArray`, TF 누적 비행 경로 | 공통 |
@@ -161,13 +161,45 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 - 변환은 전부 `adr_control/frames.py` 한 곳에서: `(e,n,u) ↔ (n,e,−u)`, `yaw_ned = π/2 − yaw_enu`, 쿼터니언은 `q_ENU→NED=(0,√½,√½,0)`, `q_FLU→FRD=(0,1,0,0)` (PX4 gz_bridge 와 동일 상수). `test/test_frames.py` 가 왕복·기수방향을 검증한다.
 - 모든 노드의 public 인터페이스는 ENU 이고 **PX4 경계(publish/subscribe 콜백)에서만** NED 로 바꾼다.
 - 게이트 `yaw_deg` = 통과 방향(개구부 법선)의 방위각, ENU CCW. ⚠️ crazyflie 레포 `gates.yaml` 은 CW 관례였으므로 값을 복사해 오면 안 된다.
-- `map` = `gates.yaml` 좌표계 = gz 월드 = mocap 프레임. **PX4 local 원점과의 관계는 `origin_mode` 로 처리**한다.
+- `map` = 맵 yaml 좌표계 = gz 월드 = mocap 프레임. **PX4 local 원점과의 관계는 `origin_mode` 로 처리**한다.
   - `world`(기본, sim `ev:=true` / 실기체 mocap): EKF2 가 외부 위치를 그대로 쓰므로 PX4 local == map. offset 0.
   - `start`(sim `ev:=false` = GPS 시뮬): PX4 local 원점 = 부팅(스폰) 위치. 기체가 `start` 에 놓여 있다고 보고 컨트롤러가 이륙 전 `offset = start − p_local` 을 한 번 재서 모든 세트포인트를 보정하고, `/adr/local_origin`(latched) 으로 `px4_odom_to_tf` 에도 알린다. 이걸 안 하면 코스 전체가 `−start` 만큼 평행이동한 자리에서 비행한다(초기 증상). GPS 모드는 월드 자기장 편각(14.6°)과 EKF2 lookup 편각(취리히 ~3°) 차이로 yaw 도 어긋날 수 있어 **sim 기본은 `ev:=true`** 로 둔다.
 
-## 4. 코스 정의 (gates.yaml)
+## 4. 코스 정의 — 맵 (`config/maps/*.yaml`)
 
-[`adr_bringup/config/gates.yaml`](../adr_ws/src/adr_bringup/config/gates.yaml) 이 단일 진실 원천이다.
+**맵 하나 = yaml 파일 하나.** [`adr_bringup/config/maps/`](../adr_ws/src/adr_bringup/config/maps/) 아래에 두며
+그 파일이 코스의 단일 진실 원천이다. 읽는 쪽은 넷 — `gate_planner`(웨이포인트), `gate_markers`(rviz),
+`gate_pnp`(게이트 위치), `gen_world.py`(gz 월드). `px4_position_controller` 도 `origin_mode:=start` 일 때 `start` 를 읽는다.
+
+| 맵 | 내용 |
+|---|---|
+| `cross` (기본) | 십자 배치 4게이트 원형 코스 (아래 그림) |
+| `figure8` | 원점에서 교차하는 8자 코스, 게이트 8개. yaw 는 레미니스케이트 접선에서 계산 |
+
+**맵 이름 == gz 월드 이름 == `assets/worlds/<맵>.sdf`** 라서 launch 인자 하나로 셋을 동시에 고른다:
+
+```bash
+ros2 launch adr_sim sim.launch.py       map:=figure8
+ros2 launch adr_bringup step1.launch.py map:=figure8
+```
+
+두 launch 의 `map` 은 같아야 한다(다르면 월드와 게이트 좌표가 어긋난다). `sim.launch.py` 는
+시작할 때 맵 yaml·월드 SDF 존재와 **mtime** 을 확인해서, 없거나 맵보다 낡았으면 원인과 명령을 찍는다.
+
+### 새 맵 추가
+
+```bash
+cp adr_ws/src/adr_bringup/config/maps/cross.yaml adr_ws/src/adr_bringup/config/maps/mymap.yaml
+# gates / start 를 고친다 (course: 블록은 참고용 메타라 코드가 읽지 않는다)
+python3 adr_ws/src/adr_sim/scripts/gen_world.py --map mymap    # 또는 --all 로 전부
+colcon build --symlink-install --packages-select adr_bringup adr_sim
+```
+
+생성물은 `assets/worlds/mymap.sdf` 와 `assets/models/adr_gate_mymap/`(그 맵의 `gate:` 치수 전용 모델) 이다.
+**배경 장애물은 게이트 배치에서 자동으로 코스 밖에 둘러지므로 맵마다 배치할 일이 없다**(§7).
+한 번 생성해 두면 그 다음부터는 `map:=` 만 바꾸면 되고 재생성은 맵 yaml 을 고칠 때만 필요하다.
+
+### 기본 맵 `cross`
 
 ```
           G2 (0, 4) yaw 180
@@ -184,7 +216,8 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 - 반지름 4 m 원 위에 90° 간격, 게이트 중심 높이 1.5 m, 법선 = 원의 접선(CCW 진행).
 - 게이트: 내부 1.5 m, 외부 2.1 m(프레임 폭 0.3 m), 두께 0.1 m, 주황색.
 - `start` = 이륙 지점(바닥). G4→G1 사이 원호 위에 두어 이륙 후 첫 진입이 자연스럽다.
-- 값을 바꾸면 **`adr_sim/scripts/gen_world.py`** 를 다시 돌려 월드·게이트 모델(`gate:` 치수)·배경(`scene.yaml`)을 갱신하고 커밋한다(planner/markers 는 yaml 을 직접 읽으므로 자동 반영).
+- 값을 바꾸면 **`gen_world.py --map cross`** 를 다시 돌려 월드·게이트 모델·배경을 갱신하고 커밋한다
+  (planner/markers/pnp 는 yaml 을 직접 읽으므로 자동 반영).
 
 ## 5. min-snap 궤적 생성
 
@@ -196,7 +229,7 @@ step 1 에서 실제로 동작하는 경로는 **gates.yaml → gate_planner →
 - 시간 할당: 세그먼트 길이 / `v_avg`, 출발·정지 세그먼트에 `v_avg/a_max` 추가. 샘플링으로 `v_max`, `a_max` 초과 시 전체 시간을 균일 스케일(최대 5회).
 - yaw 는 `np.unwrap` 으로 연속화해 풀고, 컨트롤러가 PX4 로 보낼 때 `[-π, π]` 로 감싼다.
 - 웨이포인트(`course.py`): `[start 호버점] + ([게이트−d·n, 게이트 중심, 게이트+d·n] × 4게이트 × laps) + [start 호버점]`. `approach_dist` d=0.8 m 의 전후 접근점이 게이트를 **면에 수직으로** 통과하게 만든다(중심 통과 시 속도·법선 cos > 0.97).
-- 오프라인 확인: `python3 -m adr_planning.plot_trajectory --gates adr_ws/src/adr_bringup/config/gates.yaml --laps 2`
+- 오프라인 확인: `python3 -m adr_planning.plot_trajectory --gates adr_ws/src/adr_bringup/config/maps/cross.yaml --laps 2`
 
 기본 파라미터(`planner.yaml`: v_avg 3, v_max 6, a_max 8, laps 2)에서 2바퀴 17.7 s, 최고 3.8 m/s.
 
@@ -255,9 +288,9 @@ airframe `4030_gz_adr_racer`: `4001_gz_x500` 기반. `CA_ROTORn_PX/PY = ±0.080`
 
 airframe `4031_gz_adr_racer_ev`: 4030 + `EKF2_EV_CTRL 15`, `EKF2_HGT_REF 3`, `EKF2_GPS_CTRL 0`, `EKF2_BARO_CTRL 0`. 외부 위치(sim: OdometryPublisher 진실값, 실기체: mocap)만으로 EKF2 를 돌리는 세트.
 
-### 게이트 `adr_gate`
+### 게이트 `adr_gate_<맵>`
 
-box 링크 4개(좌·우·상·하)로 된 static 모델. 원점 = 개구부 중심, +x = 통과 방향. 색 `1.0 0.45 0.0`.
+맵의 `gate:` 치수로 맵마다 하나씩 생성되는, box 링크 4개(좌·우·상·하)로 된 static 모델. 원점 = 개구부 중심, +x = 통과 방향. 색 `1.0 0.45 0.0`.
 
 ### 배경: 텍스처 바닥 `adr_ground` + 장애물
 
@@ -268,14 +301,28 @@ box 링크 4개(좌·우·상·하)로 된 static 모델. 원점 = 개구부 중
 - **텍스처 바닥** `adr_ground`: 60×60 m 상자(윗면 정확히 z=0). 512² PNG 를 `<pbr><albedo_map>` 으로 입히는데,
   8 px 타일 = 바닥 0.94 m 격자라 타일 경계마다 코너가 생긴다. PNG 는 `gen_world.py` 가 외부 의존성 없이
   직접 써서(zlib) 41 KB. 무한 평면 `ground_plane` 은 z=−0.02 로 내려 배경으로만 남긴다.
-- **장애물**: 기둥 12개(반지름 6.5~7.5 m, 높이 2~4 m) + 상자 10개(반지름 8~12 m). 전부 코스 바깥이다 —
-  코스 반지름 4 m + 게이트 반폭 1.05 m 보다 최소 1.5 m 이상 떨어져 있다(최소 반지름 6.6 m).
-  카메라가 20° 위를 보므로 바닥보다 **세로로 선 기둥**이 시차(parallax)를 주는 데 효율이 좋다.
+- **장애물**: 기둥 12개(높이 2~4 m) + 상자 10개. 링 형태로 **자동 배치**되며 전부 코스 바깥이다.
+  배치 반지름은 절대값이 아니라 **코스 envelope 기준 상대값**이다:
+
+  ```
+  envelope       = max(게이트 중심 거리 + outer_size/2, start 거리)   # 맵 yaml 에서 계산
+  배치 반지름     = envelope + clearance                              # scene.yaml
+  ```
+
+  현재 코스는 envelope 5.05 m, 기둥 clearance 1.5~2.5 m → 6.55~7.55 m, 상자 3~7 m → 8~12 m.
+  맵을 어떤 배치로 바꿔도(반지름 변경·8자·직선) envelope 가 같이 커지므로
+  **`scene.yaml` 은 손댈 필요가 없고 맵마다 장애물을 배치하는 작업도 없다**.
+  envelope 가 `ground.size/2 − 1 m` 를 넘으면 `gen_world.py` 가 바닥을 키우라고 에러를 낸다.
+- **왜 바닥만으론 안 되는가**: 카메라가 20° 위를 보므로 바닥은 약 5 m 앞부터 화면 아래쪽에만 보인다.
+  그 특징점들은 전부 z=0 한 평면 위에 깊이도 비슷한 띠로 몰려 있고, 등고도 원형 비행은 그 평면과
+  평행한 운동이다 — 깊이·스케일 관측성이 약해지는 전형적인 퇴화 구성이다. 추적점 수는 넉넉해 보여도
+  z 와 스케일이 흐른다. **세로로 선 기둥**은 깊이를 2~12 m 로 퍼뜨리고 화면 위아래로 길게 걸쳐
+  시차(parallax)를 주므로, 바닥보다 기둥이 VIO 수렴에 결정적이다.
 - `seed` 를 바꾸면 배치·색·텍스처가 통째로 달라진다. VIO 가 특정 배경에 과적합하지 않았는지 볼 때 쓴다.
 
-### 월드 `adr_cross.sdf`
+### 월드 `<맵>.sdf`
 
-`gen_world.py` 가 `gates.yaml`(코스) + `scene.yaml`(배경) 에서 생성. PX4 가 gz 를 직접 띄우지 않는 **standalone 모드**이므로 PX4 `server.config` 가 넣어주던 시스템 플러그인(Physics, UserCommands, SceneBroadcaster, Contact, Imu, AirPressure, Magnetometer, NavSat, Sensors(ogre2))을 월드에 직접 포함하고, navsat 용 `<spherical_coordinates>` 도 넣는다. 게이트 4개와 `adr_racer` 를 `<include>` 로 배치(드론 이름 `adr_racer` = `PX4_GZ_MODEL_NAME`).
+`gen_world.py` 가 맵 yaml(코스) + `scene.yaml`(배경) 에서 맵마다 하나씩 생성(`<world name>` = 맵 이름). PX4 가 gz 를 직접 띄우지 않는 **standalone 모드**이므로 PX4 `server.config` 가 넣어주던 시스템 플러그인(Physics, UserCommands, SceneBroadcaster, Contact, Imu, AirPressure, Magnetometer, NavSat, Sensors(ogre2))을 월드에 직접 포함하고, navsat 용 `<spherical_coordinates>` 도 넣는다. 게이트와 `adr_racer` 를 `<include>` 로 배치(드론 이름 `adr_racer` = `PX4_GZ_MODEL_NAME`).
 
 ## 8. 환경 설치 (Ubuntu VM)
 
@@ -335,9 +382,9 @@ ros2 launch adr_sim sim.launch.py
 ros2 launch adr_bringup step1.launch.py laps:=2 time_scale:=1.0 land_after:=true
 ```
 
-`sim.launch.py` 내부 순서: `GZ_SIM_RESOURCE_PATH` 에 `adr_sim/assets/{models,worlds}` 추가 → gz 서버(+GUI) → Agent → PX4 `ExecuteProcess`(airframe 복사·잔여 px4 정리 후, `/world/adr_cross/clock` 이 보일 때까지 대기하고 `PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=adr_cross PX4_SYS_AUTOSTART=4030|4031` 로 PX4 기동) → 브릿지·시각화 노드. 월드 이름(`<world name="adr_cross">`)과 모델 이름이 PX4 env 와 일치해야 한다.
+`sim.launch.py` 내부 순서: `GZ_SIM_RESOURCE_PATH` 에 `adr_sim/assets/{models,worlds}` 추가 → gz 서버(+GUI) → Agent → PX4 `ExecuteProcess`(airframe 복사·잔여 px4 정리 후, `/world/<맵>/clock` 이 보일 때까지 대기하고 `PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=<맵> PX4_SYS_AUTOSTART=4030|4031` 로 PX4 기동) → 브릿지·시각화 노드. 월드 이름(`<world name="<맵>">`)과 모델 이름이 PX4 env 와 일치해야 하는데, `gen_world.py` 가 월드 이름을 맵 이름으로 쓰고 launch 가 `map:=` 을 그대로 넘기므로 자동으로 맞는다.
 
-PX4 는 daemon 모드라 `pxh>` 셸이 없다. 명령은 클라이언트 바이너리로: `~/PX4-Autopilot/build/px4_sitl_default/bin/px4-commander check`, `px4-param set MPC_XY_VEL_MAX 5`, `px4-commander takeoff`. `pxh>` 셸이 꼭 필요하면 launch 대신 gz 를 띄운 상태에서 `cd ~/PX4-Autopilot/build/px4_sitl_default && PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=adr_cross PX4_SYS_AUTOSTART=4030 ./bin/px4 ./etc -s etc/init.d-posix/rcS` 를 직접 실행한다(launch 의 PX4 와 중복 실행 금지).
+PX4 는 daemon 모드라 `pxh>` 셸이 없다. 명령은 클라이언트 바이너리로: `~/PX4-Autopilot/build/px4_sitl_default/bin/px4-commander check`, `px4-param set MPC_XY_VEL_MAX 5`, `px4-commander takeoff`. `pxh>` 셸이 꼭 필요하면 launch 대신 gz 를 띄운 상태에서 `cd ~/PX4-Autopilot/build/px4_sitl_default && PX4_GZ_STANDALONE=1 PX4_GZ_MODEL_NAME=adr_racer PX4_GZ_WORLD=cross PX4_SYS_AUTOSTART=4030 ./bin/px4 ./etc -s etc/init.d-posix/rcS` 를 직접 실행한다(launch 의 PX4 와 중복 실행 금지).
 
 유용한 확인 명령:
 
@@ -347,7 +394,7 @@ ros2 run rqt_image_view rqt_image_view /adr/perception/debug_image   # 게이트
 ros2 topic list | grep fmu              # 실제 토픽 이름(_v 접미사) 확인
 ros2 topic hz /fmu/out/vehicle_local_position_v1
 gz topic -l | grep adr_racer
-ros2 run adr_planning plot_trajectory --gates adr_ws/src/adr_bringup/config/gates.yaml --laps 2
+ros2 run adr_planning plot_trajectory --gates adr_ws/src/adr_bringup/config/maps/cross.yaml --laps 2
 ```
 
 ## 10. 실기체(mocap) 전환
@@ -356,7 +403,7 @@ ros2 run adr_planning plot_trajectory --gates adr_ws/src/adr_bringup/config/gate
 2. mocap rigid body 이름을 `adr_racer` 로 두고(또는 `rigid_body:=`), rigid body 의 x 축이 기체 앞을 보도록 정의한다(yaw 정렬). mocap 좌표계는 ENU(z-up).
 3. `motion_capture_tracking` 실행 (crazyflie 레포의 `motion_capture.yaml` 과 같은 방식, `/poses` 발행).
 4. `ros2 launch adr_bringup real.launch.py` → `mocap_bridge` 가 `/fmu/in/vehicle_visual_odometry` 로 주입. QGC/`ros2 topic echo /fmu/out/vehicle_local_position` 에서 위치가 mocap 과 일치하는지, 기체를 손으로 움직여 방향이 맞는지 확인.
-5. 게이트를 `gates.yaml` 좌표(mocap 원점 기준)에 배치하고 이륙 지점 `start` 에 기체를 둔다(`WAIT_TRAJ` 에서 현재 위치를 hold 로 잡으므로 정확할 필요는 없지만 첫 세그먼트가 짧을수록 좋다).
+5. 게이트를 맵 yaml 좌표(mocap 원점 기준)에 배치하고 이륙 지점 `start` 에 기체를 둔다(`WAIT_TRAJ` 에서 현재 위치를 hold 로 잡으므로 정확할 필요는 없지만 첫 세그먼트가 짧을수록 좋다).
 6. `ros2 launch adr_bringup step1.launch.py use_sim_time:=false time_scale:=0.5 laps:=1` 로 저속 1바퀴부터.
 
 sim 에서는 `--ev` 로 같은 EKF2 경로를 미리 검증할 수 있다(모델의 `OdometryPublisher` 진실값이 PX4 gz_bridge 를 통해 같은 uORB `vehicle_visual_odometry` 로 들어간다). 이때 ROS `mocap_bridge` 를 같이 띄우면 인스턴스가 2개가 되므로 띄우지 않는다.
@@ -380,7 +427,7 @@ Ubuntu VM:
 | 증상 | 원인/대응 |
 |---|---|
 | `/fmu/out/*` 가 아무것도 안 옴 | 구독 QoS 가 reliable. `PX4_SUB_QOS`(best effort, volatile) 사용. `MicroXRCEAgent` 가 떠 있는지, `ROS_DOMAIN_ID` 일치 확인 |
-| PX4 가 `gz_bridge` 에서 멈춤 / 센서 없음 | 월드에 Imu/Magnetometer/AirPressure/NavSat/Sensors 시스템 플러그인이 없음(standalone). `adr_cross.sdf` 가 생성본인지 확인 |
+| PX4 가 `gz_bridge` 에서 멈춤 / 센서 없음 | 월드에 Imu/Magnetometer/AirPressure/NavSat/Sensors 시스템 플러그인이 없음(standalone). `assets/worlds/<맵>.sdf` 가 생성본인지 확인(`gen_world.py --all`) |
 | `PX4_GZ_MODEL_NAME` 모델을 못 찾음 | 월드의 `<include><name>adr_racer</name>` 와 이름 불일치, 또는 `PX4_GZ_WORLD` ≠ `<world name>` |
 | offboard 전환 거부 (`REJECT OFFBOARD`) | 세트포인트 스트림이 없거나 2 Hz 미만. WARMUP 이 돌고 있는지, `/fmu/in/offboard_control_mode` 가 50 Hz 인지 확인 |
 | arm 거부 | EKF 위치 미수렴(`xy_valid`), 또는 preflight 실패. `pxh> commander check` |

@@ -1,8 +1,15 @@
-# 십자 배치 4게이트 원형 코스 — 코스 정의의 단일 진실 원천.
-#   - adr_planning/gate_planner 가 읽어 웨이포인트를 만들고
-#   - adr_sim/scripts/gen_world.py 가 읽어 worlds/adr_cross.sdf 를 생성하며
-#   - adr_bringup/gate_markers 가 읽어 rviz 마커를 그린다.
-# 이 파일을 바꾸면 반드시 gen_world.py 를 다시 돌려 월드를 갱신할 것.
+# 맵: 십자 배치 4게이트 원형 코스 (map:=cross)
+#
+# 맵 하나 = 이 파일 하나. 코스 정의의 단일 진실 원천이며 세 곳이 읽는다.
+#   - adr_planning/gate_planner   → min-snap 웨이포인트
+#   - adr_bringup/gate_markers    → rviz 마커
+#   - adr_sim/scripts/gen_world.py → assets/worlds/cross.sdf (+ 배경 장애물 자동 배치)
+#
+# 새 맵 만들기: 이 파일을 maps/<이름>.yaml 로 복사해 gates 를 고치고
+#   python3 adr_ws/src/adr_sim/scripts/gen_world.py --map <이름>      # 월드 생성 (1회)
+#   ros2 launch adr_sim sim.launch.py      map:=<이름>
+#   ros2 launch adr_bringup step1.launch.py map:=<이름>
+# 장애물은 게이트 배치에서 자동으로 코스 밖에 둘러진다 — scene.yaml 은 손댈 필요 없다.
 #
 # 좌표계: ENU(map), 단위 m / deg.
 # yaw_deg: 게이트 통과 방향(개구부 법선)의 방위각. +x 기준 **CCW(위에서 봤을 때 반시계)**.

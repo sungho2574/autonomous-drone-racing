@@ -1,6 +1,6 @@
 gate_pnp:
   ros__parameters:
-    gates_file: ""                  # 비우면 adr_bringup/config/gates.yaml
+    gates_file: ""                  # 비우면 config/maps/cross.yaml (launch 가 map:= 로 채운다)
     frame_id: map
     max_marks: 2000                 # /adr/pnp/marks 에 쌓아 둘 X 표시 개수
     mark_size: 0.12                 # X 한 변 [m]

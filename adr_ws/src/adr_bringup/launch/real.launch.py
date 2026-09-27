@@ -4,7 +4,7 @@
   - motion_capture_tracking (Qualisys 등) 이 /poses 를 발행 중
   - 기체 PX4 는 airframe 4031 과 동일한 EKF2 파라미터(EKF2_EV_CTRL=15, EKF2_HGT_REF=3, EKF2_GPS_CTRL=0)
   - MicroXRCEAgent 가 기체(시리얼/UDP)에 연결됨
-인자: rigid_body:=adr_racer  source:=poses|tf  rviz:=true
+인자: rigid_body:=adr_racer  source:=poses|tf  rviz:=true  map:=cross (실기체에서 날릴 코스)
 """
 import os
 
@@ -22,11 +22,14 @@ def generate_launch_description():
         DeclareLaunchArgument('rigid_body', default_value='adr_racer'),
         DeclareLaunchArgument('source', default_value='poses'),
         DeclareLaunchArgument('rviz', default_value='true'),
+        DeclareLaunchArgument('map', default_value='cross'),
 
         Node(package='adr_bringup', executable='mocap_bridge', name='mocap_bridge',
              parameters=[{'rigid_body_name': LaunchConfiguration('rigid_body'),
                           'source': LaunchConfiguration('source')}], output='screen'),
-        Node(package='adr_bringup', executable='gate_markers', name='gate_markers', output='screen'),
+        Node(package='adr_bringup', executable='gate_markers', name='gate_markers',
+             parameters=[{'gates_file': [os.path.join(bringup_share, 'config', 'maps') + '/',
+                                         LaunchConfiguration('map'), '.yaml']}], output='screen'),
         Node(package='adr_bringup', executable='px4_odom_to_tf', name='px4_odom_to_tf', output='screen'),
         Node(package='rviz2', executable='rviz2', name='rviz2',
              arguments=['-d', os.path.join(bringup_share, 'config', 'adr.rviz')],
