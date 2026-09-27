@@ -171,10 +171,42 @@ step 1 에서 실제로 동작하는 경로는 **맵 yaml → gate_planner → p
 그 파일이 코스의 단일 진실 원천이다. 읽는 쪽은 넷 — `gate_planner`(웨이포인트), `gate_markers`(rviz),
 `gate_pnp`(게이트 위치), `gen_world.py`(gz 월드). `px4_position_controller` 도 `origin_mode:=start` 일 때 `start` 를 읽는다.
 
-| 맵 | 내용 |
-|---|---|
-| `cross` (기본) | 십자 배치 4게이트 원형 코스 (아래 그림) |
-| `figure8` | 원점에서 교차하는 8자 코스, 게이트 8개. yaw 는 레미니스케이트 접선에서 계산 |
+| 맵 | 게이트 | 내용 | step1 비행 |
+|---|---|---|---|
+| `cross` (기본) | 4 | 십자 배치 4게이트 원형 코스 (아래 그림) | ✅ |
+| `figure8` | 8 | 원점에서 교차하는 8자. yaw 는 레미니스케이트 접선에서 계산 | ✅ |
+| `inverted_loop` | 3 | SkyDreamer 논문 Fig 6 / Table IV "Loop". 실제 게이트 2개 + 논문의 가상 게이트 1개 | ❌ |
+| `ladder_loop` | 5 | 논문 Fig 4·5 / Table IV "Ladder loop". 논문의 시뮬 결과가 나온 코스 | ❌ |
+| `big_track` | 12 | 논문 Fig 9 의 약 23×13 m 타원형(일반화 테스트용) | ❌ |
+
+### SkyDreamer 논문 트랙 (`inverted_loop` / `ladder_loop` / `big_track`)
+
+`track.py` 의 `INVERTED_LOOP` / `LADDER_INVERTED_LOOP` / `BIG_TRACK` 을 옮긴 것이다. 원본이 **NED** 라 변환했다:
+
+```
+x_enu = y_ned,  y_enu = x_ned,  z_enu = -z_ned,  yaw_enu = (90° - yaw_ned) mod 360
+```
+
+(NED yaw 는 North→East 로, ENU yaw 는 East→North 로 재기 때문. 검산: `yaw_ned=90`(=+Y=East) → `yaw_enu=0`(=+x=East).)
+
+변환이 맞는지는 논문이 **독립적으로 밝힌 수치**로 확인했다 — 실제 게이트 2개 간격 5.00 m(논문 5.0),
+실제↔가상 게이트 고도차 2.70 m(논문 2.7 = split-S 지름), 게이트 외곽 2.70 m(논문 2.7),
+게이트 1·3 통과 방향 +x, 가상 게이트 −x.
+
+논문은 일부 게이트를 **가상 게이트**(기동을 강제하는 경유점, 렌더링만 안 함)로 두는데,
+여기서는 구분 없이 전부 실제 게이트로 넣었다. 기체가 어차피 그 개구부를 지나가는 점이라 기하가 같고,
+맵 yaml 주석에 논문에서 가상이던 게이트를 표시해 뒀다. 이 점들을 빼면 코스가 성립하지 않는다 —
+`inverted_loop` 에서 게이트 2 위 2.7 m 의 점이 split-S 를 만드는 경유점이고, 빼면 게이트 2개가
+일렬로 놓인 직선 코스가 된다.
+
+> ⚠️ **이 세 맵은 step1 으로 비행할 수 없다.** split-S(뒤집기)·ladder(360° 선회)가 들어가는데
+> PX4 position control 은 뒤집히지 않는다. 그뿐 아니라 min-snap 이 4.05 m 의 가상 게이트에서
+> 1.35 m 의 실제 게이트로 내려오는 구간을 매끄럽게 잇느라 **바닥 0.12~0.16 m 까지 내려찍는다**
+> (`laps:=1`, `v_avg 3`). step 2 의 RL/CTBR 용 코스 기하로 넣어 둔 것이고, 지금은 rviz·gz 로
+> 배치를 확인하는 데 쓴다. `big_track` 은 코스가 커서 VIO/인식 테스트용 큰 월드로도 쓸 만하다.
+
+좌표는 논문이 게이트 좌표를 공개하지 않아 그림에서 측정한 재구성이다(±0.05 m, `inverted_loop` 의
+게이트 1 은 ±0.2 m). 실측 좌표가 생기면 맵 yaml 만 갈아끼우면 된다.
 
 **맵 이름 == gz 월드 이름 == `assets/worlds/<맵>.sdf`** 라서 launch 인자 하나로 셋을 동시에 고른다:
 

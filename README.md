@@ -130,7 +130,14 @@ ros2 launch adr_sim sim.launch.py       map:=figure8    # T1
 ros2 launch adr_bringup step1.launch.py map:=figure8    # T2
 ```
 
-기본 제공: `cross`(십자 4게이트 원형, 기본값) · `figure8`(8자, 게이트 8개).
+기본 제공:
+
+| 맵 | 내용 | step1 비행 |
+|---|---|---|
+| `cross` | 십자 4게이트 원형 (기본값) | ✅ |
+| `figure8` | 8자, 게이트 8개 | ✅ |
+| `inverted_loop` · `ladder_loop` · `big_track` | SkyDreamer 논문 트랙 (NED→ENU 변환) | ❌ split-S·ladder 가 들어가 position control 로는 못 난다. step2 용 기하 + 배치 확인용 |
+
 새 맵은 `cross.yaml` 을 복사해 `gates` / `start` 만 고치고 월드를 한 번 생성하면 된다:
 
 ```bash

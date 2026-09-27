@@ -1,0 +1,31 @@
+# 맵: inverted loop (map:=inverted_loop) — SkyDreamer 논문 Figure 6 / Table IV "Loop"
+#
+# 출처: track.py 의 INVERTED_LOOP 를 NED→ENU 로 변환한 것. 원본 좌표는 논문 그림에서
+# 측정한 재구성이라 ±0.05 m(게이트 1 은 ±0.2 m) 오차가 있다.
+# 실제 게이트 2개가 y 축으로 5 m 떨어져 있고 둘 다 +x 로 통과한다.
+#
+# ⚠️ **step1(min-snap + PX4 위치제어)로는 비행 불가**하다 — split-S(뒤집기)가 들어간다.
+#    step2 의 RL/CTBR 용 코스 기하이고, 지금은 rviz/gz 로 배치를 확인하는 용도다.
+#
+# 논문은 일부 게이트를 "가상 게이트"(기동을 강제하는 경유점, 렌더링 안 함) 로 두는데,
+# 여기서는 구분 없이 전부 실제 게이트로 넣었다 — 어차피 기체가 그 개구부를 지나가는 점이라
+# 기하가 같고, 아래 주석에 논문에서 가상이던 게이트를 표시해 뒀다.
+course:
+  source: SkyDreamer track.py      # 참고용 메타 (코드는 gates/start/gate 만 읽는다)
+  frame_note: NED→ENU 변환됨 (x_enu = y_ned, y_enu = x_ned, z_enu = -z_ned, yaw_enu = 90° - yaw_ned)
+gate:
+  inner_size: 1.5
+  outer_size: 2.7              # 논문의 주황 게이트 (프레임 폭 0.6 m)
+  thickness: 0.05                  # 물리 프레임 두께. 논문의 t_g(보상용 충돌 볼륨)와는 다른 값이다
+# 이륙 지점 = 게이트 1 앞 3 m (논문 Table III: "게이트 앞 2~4 m 에서 출발")
+start:
+  x: -3.00
+  y: 3.00
+  takeoff_z: 1.35
+gates:
+  # 1. 게이트 1 — +x 로 통과
+  - { id: 1, x: 0.00, y: 3.00, z: 1.35, yaw_deg: 0 }
+  # 2. (논문 가상) 게이트 2 위 2.7 m, 반대 방향. "두 번째 게이트 위로 넘어간다"
+  - { id: 2, x: 0.00, y: -2.00, z: 4.05, yaw_deg: 180 }
+  # 3. 게이트 2 — split-S: 뒤집어 당겨 내려오며 진행 방향이 다시 +x 로
+  - { id: 3, x: 0.00, y: -2.00, z: 1.35, yaw_deg: 0 }

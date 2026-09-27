@@ -1,0 +1,44 @@
+# 맵: big oval (map:=big_track) — 논문 Figure 9, zero-shot 일반화 테스트용 큰 코스
+#
+# track.py 의 BIG_TRACK 을 NED→ENU 변환. 약 23 x 13 m 타원형에 게이트 12개(실제 8, 가상 4).
+# 논문이 좌표를 공개하지 않아 Figure 9 에서 측정한 재구성이다.
+#
+# ⚠️ **step1 으로는 비행 불가** (ladder + 급강하 + split-S).
+#    다만 코스가 커서 VIO/인식 테스트용 큰 월드로는 쓸 만하다.
+course:
+  source: SkyDreamer track.py      # 참고용 메타 (코드는 gates/start/gate 만 읽는다)
+  frame_note: NED→ENU 변환됨 (x_enu = y_ned, y_enu = x_ned, z_enu = -z_ned, yaw_enu = 90° - yaw_ned)
+gate:
+  inner_size: 1.5
+  outer_size: 2.7              # 논문의 주황 게이트 (프레임 폭 0.6 m)
+  thickness: 0.05                  # 물리 프레임 두께. 논문의 t_g(보상용 충돌 볼륨)와는 다른 값이다
+# 이륙 지점 = 게이트 1 앞 3 m (논문 Table III: "게이트 앞 2~4 m 에서 출발")
+start:
+  x: -12.50
+  y: 3.70
+  takeoff_z: 1.25
+gates:
+  # 1. 출발 게이트 (논문 "top-left gate")
+  - { id: 1, x: -9.50, y: 3.70, z: 1.25, yaw_deg: 0 }
+  # 2. 완만한 좌선회 후 첫 직선
+  - { id: 2, x: -3.40, y: 6.00, z: 1.25, yaw_deg: 0 }
+  # 3. 직선 두 번째
+  - { id: 3, x: 2.80, y: 6.00, z: 1.25, yaw_deg: 0 }
+  # 4. 우선회 진입 — 45° 기울어진 게이트
+  - { id: 4, x: 8.50, y: 2.60, z: 1.25, yaw_deg: 315 }
+  # 5. (논문 가상) ladder 위로
+  - { id: 5, x: 11.50, y: 5.50, z: 3.45, yaw_deg: 200 }
+  # 6. (논문 가상) ladder 되돌아오기
+  - { id: 6, x: 10.50, y: 0.50, z: 2.25, yaw_deg: 330 }
+  # 7. 급강하로 진입
+  - { id: 7, x: 8.90, y: -3.00, z: 1.25, yaw_deg: 235 }
+  # 8. 반대쪽 직선
+  - { id: 8, x: 2.80, y: -6.00, z: 1.25, yaw_deg: 180 }
+  # 9. 직선 두 번째
+  - { id: 9, x: -3.40, y: -6.00, z: 1.25, yaw_deg: 180 }
+  # 10. (논문 가상) 급제동 후 샤프 우선회
+  - { id: 10, x: -7.50, y: -3.00, z: 1.25, yaw_deg: 120 }
+  # 11. 가운데 게이트 (나머지와 90° 틀어짐)
+  - { id: 11, x: -0.30, y: 0.00, z: 1.25, yaw_deg: 90 }
+  # 12. (논문 가상) 첫 게이트 위 split-S 로 마무리
+  - { id: 12, x: -9.50, y: 3.70, z: 3.95, yaw_deg: 180 }
