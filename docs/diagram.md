@@ -12,24 +12,28 @@ flowchart LR
 ```
 
 ```mermaid
-flowchart TB
+flowchart LR
     A["Gazebo / Hardware"]
-    A --> I(["IMU<br/>(6-axis: Acc + Gyro)"])
-    A --> C(["Camera<br/>(Monocular RGB)"])
+    I["IMU"]
+    C["Camera"]
+    O["OpenVINS"]
+    G["GateNet + PnP"]
+    K["KF"]
+    R["RL Model"]
+    P["PX4 Rate Controller"]
+    M["Motors ×4"]
 
-    I --> O["OpenVINS"]
-    C --> O
-    C --> G["GateNet + PnP"]
+    A --> I
+    A --> C
 
-    O --> OD(["Odometry"])
-    G --> GP(["Drone Pose"])
+    I -->|"6-axis: Acc + Gyro"| O
+    C -->|"Monocular RGB Image"| O
+    C -->|"Monocular RGB Image"| G
 
-    OD --> K["KF"]
-    GP --> K
+    O -->|"Odometry"| K
+    G -->|"Drone Pose"| K
 
-    K --> S(["Drone state<br/>(Position · Velocity · Attitude · Angular velocity)"])
-    S --> R["RL Model"]
-    R --> T(["CTBR"])
-    T --> P["PX4 Rate Controller"]
-    P --> M(["Motor outputs ×4"])
+    K -->|"Drone State<br/>(Position · Velocity · Attitude · Angular Velocity)"| R
+    R -->|"CTBR"| P
+    P -->|"Motor outputs ×4"| M
 ```
