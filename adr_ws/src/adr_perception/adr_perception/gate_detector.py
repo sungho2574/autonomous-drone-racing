@@ -3,6 +3,7 @@
 /adr/camera/image_raw → HSV 임계 → 모폴로지 → 컨투어(RETR_CCOMP: 바깥 프레임 + 안쪽 구멍)
   → 게이트마다 개구부의 사각형 꼭짓점 4개 / 중심 / 면적 → /adr/gate_detections (2D 픽셀)
 
+붙은 프레임은 각 구멍을 독립된 검출로 내보낸다.
 꼭짓점은 구멍 컨투어를 convexHull → approxPolyDP 로 4점이 될 때까지 epsilon 을 키우며 찾는다.
 이미지 기준 **시계방향 TL→TR→BR→BL** 로 정렬해 내보내므로 gate_pnp 가 그대로 solvePnP 에 쓴다.
 이미지 경계에 닿거나 평행사변형 허용 오차를 벗어난 개구부는 has_corners=False 로 PnP에서 제외한다.
@@ -66,10 +67,10 @@ def bgr8_to_imgmsg(bgr: np.ndarray, header) -> Image:
 @dataclass
 class Detection:
     """검출된 게이트 1개 (이미지 좌표)."""
-    bbox: tuple              # (x, y, w, h) 주황 프레임 바운딩박스. 디버그 이미지엔 안 그리지만
+    bbox: tuple              # (x, y, w, h) 단일 프레임 또는 붙은 게이트의 개별 개구부 bbox.
                              # 메시지로는 계속 내보낸다 (다른 소비자/디버깅용)
     center: tuple            # (u, v) 개구부 중심. 구멍이 없으면 bbox 중심
-    area: float              # 주황 프레임 컨투어 면적 [px^2]
+    area: float              # 개구부 면적 [px^2], 구멍이 없으면 외곽 면적
     has_hole: bool
     conf: float
     corners: np.ndarray      # (4,2) float32, TL→TR→BR→BL. 신뢰 못 하면 빈 배열
@@ -186,38 +187,50 @@ class GateDetector(Node):
             if area < self.min_area:
                 continue
             x, y, w, h = cv2.boundingRect(c)
-            # 가장 큰 구멍(개구부) 찾기
-            hole, hole_area = None, 0.0
+            # A connected orange frame can contain several gate openings.
+            # Keep every sufficiently large child contour as an independent detection.
+            holes = []
             j = hierarchy[i][2]
             while j != -1:
-                a = cv2.contourArea(contours[j])
-                if a > hole_area:
-                    hole, hole_area = contours[j], a
+                hole_area = cv2.contourArea(contours[j])
+                if hole_area >= self.min_hole_area:
+                    holes.append((contours[j], hole_area))
                 j = hierarchy[j][0]
 
-            corners = np.empty((0, 2), np.float32)
-            if hole is not None and hole_area >= self.min_hole_area:
+            if not holes:
+                aspect = min(w, h) / max(w, h)
+                ring_ratio = area / max(w * h, 1.0)
+                conf = float(np.clip(0.5 * aspect + 0.5 * min(ring_ratio / 0.5, 1.0), 0.0, 1.0))
+                out.append(Detection((x, y, w, h), (x + w / 2, y + h / 2),
+                                     area, False, conf, np.empty((0, 2), np.float32)))
+                continue
+
+            for hole, hole_area in holes:
                 m = cv2.moments(hole)
-                cu, cv_ = m['m10'] / m['m00'], m['m01'] / m['m00']
-                has_hole = True
+                center = (m['m10'] / m['m00'], m['m01'] / m['m00'])
+                corners = np.empty((0, 2), np.float32)
                 if hole_area >= self.min_corner_area:
                     q = quad_from_contour(hole)
-                    # 이미지 경계에 닿으면 꼭짓점이 잘린 것 — PnP 에 쓰면 포즈가 크게 틀어진다
                     if len(q) == 4 and (q[:, 0] > self.border).all() and (q[:, 1] > self.border).all() \
                             and (q[:, 0] < w_img - 1 - self.border).all() \
                             and (q[:, 1] < h_img - 1 - self.border).all():
-                        # Keep 2D detection, but do not feed malformed quads to PnP.
                         if is_parallelogram(q, self.max_parallel_angle_deg,
                                             self.max_opposite_length_error):
                             corners = q
-            else:
-                cu, cv_ = x + w / 2, y + h / 2
-                has_hole = False
-            # 신뢰도: 프레임(링) 면적 비율이 사각 링에 가깝고 종횡비가 1 에 가까울수록 높게
-            ring_ratio = (area - hole_area) / max(w * h, 1.0)
-            aspect = min(w, h) / max(w, h)
-            conf = float(np.clip(0.5 * aspect + 0.5 * min(ring_ratio / 0.5, 1.0), 0.0, 1.0))
-            out.append(Detection((x, y, w, h), (cu, cv_), area, has_hole, conf, corners))
+                if len(holes) == 1:
+                    bbox = (x, y, w, h)
+                    ring_ratio = (area - hole_area) / max(w * h, 1.0)
+                    aspect = min(w, h) / max(w, h)
+                    conf = float(np.clip(0.5 * aspect + 0.5 * min(ring_ratio / 0.5, 1.0), 0.0, 1.0))
+                else:
+                    # Shared outer bounds/area would wrongly give every opening the
+                    # entire cluster's size. Use the individual opening's bounds.
+                    bbox = cv2.boundingRect(hole)
+                    _, _, hw, hh = bbox
+                    aspect = min(hw, hh) / max(hw, hh)
+                    fill = hole_area / max(hw * hh, 1.0)
+                    conf = float(np.clip(0.5 * aspect + 0.5 * fill, 0.0, 1.0))
+                out.append(Detection(bbox, center, hole_area, True, conf, corners))
         out.sort(key=lambda d: d.area, reverse=True)
         return out[:self.max_gates], mask
 

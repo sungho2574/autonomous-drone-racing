@@ -70,6 +70,55 @@ def test_no_gate():
     assert dets == []
 
 
+@pytest.mark.parametrize('centers', [
+    [(220, 240), (340, 240)],
+    [(220, 180), (220, 300)],
+    [(220, 300), (340, 300), (220, 180)],
+])
+def test_touching_frames_have_separate_openings(centers):
+    img = np.full((480, 640, 3), BG, np.uint8)
+    for cx, cy in centers:
+        _gate(img, cx, cy, 120, 80)
+    dets, mask = _detector().detect(img)
+    # Prove this exercises one connected orange cluster, not isolated gates.
+    assert cv2.connectedComponents(mask)[0] == 2
+    assert len(dets) == len(centers)
+    for cx, cy in centers:
+        matches = [d for d in dets if np.linalg.norm(np.array(d.center) - [cx, cy]) < 1]
+        assert len(matches) == 1
+        d = matches[0]
+        assert d.has_hole and len(d.corners) == 4
+        expected = np.array([[cx-40, cy-40], [cx+40, cy-40],
+                             [cx+40, cy+40], [cx-40, cy+40]])
+        assert np.abs(d.corners - expected).max() <= 1.5
+        assert d.bbox[2] < 90 and d.bbox[3] < 90
+
+
+def test_cluster_rejects_bad_hole_without_losing_good_hole():
+    img = np.full((480, 640, 3), BG, np.uint8)
+    cv2.rectangle(img, (100, 100), (400, 300), ORANGE, -1)
+    cv2.rectangle(img, (130, 130), (230, 270), BG, -1)
+    cv2.fillPoly(img, [np.array([[270, 130], [320, 130], [370, 270], [250, 270]])], BG)
+    cv2.rectangle(img, (110, 110), (112, 112), BG, -1)  # tiny spurious hole
+    dets, _ = _detector().detect(img)
+    assert len(dets) == 2
+    assert sum(len(d.corners) == 4 for d in dets) == 1
+
+
+def test_opening_area_order_and_limit():
+    img = np.full((480, 640, 3), BG, np.uint8)
+    cv2.rectangle(img, (50, 100), (550, 300), ORANGE, -1)
+    for x, size in [(100, 40), (230, 80), (400, 120)]:
+        cv2.rectangle(img, (x, 140), (x+size, 140+size), BG, -1)
+    detector = _detector()
+    detector.max_gates = 2
+    dets, _ = detector.detect(img)
+    assert len(dets) == 2
+    assert dets[0].area > dets[1].area
+    assert dets[0].center[0] == pytest.approx(460)
+    assert dets[1].center[0] == pytest.approx(270)
+
+
 def test_partial_gate_without_hole():
     """프레임 한쪽만 보이면 has_hole=False, 중심은 bbox 중심, 꼭짓점 없음."""
     img = np.full((480, 640, 3), BG, np.uint8)
