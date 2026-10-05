@@ -174,28 +174,26 @@ step 1 에서 실제로 동작하는 경로는 **맵 yaml → gate_planner → p
 | 맵 | 게이트 | 내용 | 기본 파라미터로 비행 |
 |---|---|---|---|
 | `cross` | 4 | 십자 배치 원형 코스 (기본값) | ✅ 최대 틸트 36° |
-| `figure8` | 8 | 원점에서 교차하는 8자 | ✅ 최대 틸트 39° |
+| `figure8` | 6 | 전 게이트 높이 1.5 m, 좌우 루프와 중앙 X 교차 | SITL 미검증 |
 | `inverted_loop` | 3 | 논문 Fig 6 / Table IV "Loop" | ⚠️ 틸트 53°, 바닥 0.33 m |
-| `ladder_loop` | 5 | 논문 Fig 4·5 / Table IV "Ladder loop" | ⚠️ 틸트 50°, 바닥 0.29 m |
 | `big_track` | 12 | 논문 Fig 9, 약 23×13 m 타원형 | ⚠️ 틸트 45.2° (한계 45°) |
 
-⚠️ 표시된 셋도 **뒤집어야 하는 것은 아니다.** min-snap 은 논문의 split-S 를 재현하지 않고 그 경유점들을
+⚠️ 표시된 두 맵도 **뒤집어야 하는 것은 아니다.** min-snap 은 논문의 split-S 를 재현하지 않고 그 경유점들을
 매끄러운 곡선으로 지나가므로, 궤적 전 구간에서 필요한 추력 벡터가 위를 향한다(f_z > 0). 걸리는 것은
-**기울기**다 — PX4 `MPC_TILTMAX_AIR`(기본 45°)를 넘으면 세트포인트를 못 따라가고, 두 loop 맵은 4.05 m
+**기울기**다 — PX4 `MPC_TILTMAX_AIR`(기본 45°)를 넘으면 세트포인트를 못 따라가고, `inverted_loop` 맵은 4.05 m
 가상 게이트에서 1.35 m 실제 게이트로 내려오는 구간에서 바닥에 가까워진다. 궤적을 덜 공격적으로 만들면 해결된다:
 
 ```bash
 ros2 launch adr_bringup step1.launch.py map:=big_track     v_avg:=2.5 a_max:=6.0   # 틸트 35°, 40.5 s
 ros2 launch adr_bringup step1.launch.py map:=inverted_loop v_avg:=2.0 a_max:=5.0   # 틸트 24°, 바닥 0.40 m
-ros2 launch adr_bringup step1.launch.py map:=ladder_loop   v_avg:=2.0 a_max:=5.0   # 틸트 31°, 바닥 0.36 m
 ```
 
-즉 **다섯 맵 모두 step1 으로 날릴 수 있고**, 논문 트랙 셋은 속도를 낮춰야 한다. 기본값은
+논문 트랙 두 맵은 속도를 낮춰야 한다. 변경된 `figure8`은 SITL 비행 검증이 필요하다. 기본값은
 [`planner.yaml`](adr_ws/src/adr_bringup/config/planner.yaml) 에 있고 위처럼 launch 인자로 덮어쓴다.
 
-### SkyDreamer 논문 트랙 (`inverted_loop` / `ladder_loop` / `big_track`)
+### SkyDreamer 논문 트랙 (`inverted_loop` / `big_track`)
 
-`track.py` 의 `INVERTED_LOOP` / `LADDER_INVERTED_LOOP` / `BIG_TRACK` 을 옮긴 것이다. 원본이 **NED** 라 변환했다:
+`track.py` 의 `INVERTED_LOOP` / `BIG_TRACK` 을 옮긴 것이다. 원본이 **NED** 라 변환했다:
 
 ```
 x_enu = y_ned,  y_enu = x_ned,  z_enu = -z_ned,  yaw_enu = (90° - yaw_ned) mod 360
@@ -215,7 +213,7 @@ x_enu = y_ned,  y_enu = x_ned,  z_enu = -z_ned,  yaw_enu = (90° - yaw_ned) mod 
 
 > **비행 가능성**: 위 표 참고. min-snap 은 논문의 split-S/ladder 기동을 재현하지 않으므로
 > 뒤집힐 일은 없고(궤적 전 구간 f_z > 0), 기본 파라미터에서는 틸트가 `MPC_TILTMAX_AIR`(45°)를
-> 넘는 것이 문제다. `v_avg` / `a_max` 를 낮추면 셋 다 날아간다. 논문의 곡예 기동 자체는 step 2 의
+> 넘는 것이 문제다. `v_avg` / `a_max` 를 낮추면 두 맵 모두 날아간다. 논문의 곡예 기동 자체는 step 2 의
 > RL/CTBR 로 가야 나온다. `big_track` 은 코스가 커서 VIO/인식 테스트용 큰 월드로도 쓸 만하다.
 
 좌표는 논문이 게이트 좌표를 공개하지 않아 그림에서 측정한 재구성이다(±0.05 m, `inverted_loop` 의
