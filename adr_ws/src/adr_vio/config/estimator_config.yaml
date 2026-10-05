@@ -21,10 +21,10 @@ calib_cam_timeoffset: false
 calib_imu_intrinsics: false
 calib_imu_g_sensitivity: false
 
-max_clones: 11
+max_clones: 15
 max_slam: 50
 max_slam_in_update: 25
-max_msckf_in_update: 40
+max_msckf_in_update: 80
 dt_slam_delay: 1
 
 gravity_mag: 9.8            # 월드 SDF 의 <gravity>0 0 -9.8</gravity> 과 일치시킬 것
@@ -51,13 +51,13 @@ init_max_disparity: 10.0
 init_max_features: 50
 
 use_klt: true
-num_pts: 200
+num_pts: 300
 fast_threshold: 15          # 게이트/바닥 텍스처가 빈약한 합성 장면이라 기본 20 보다 낮춤
 grid_x: 5
 grid_y: 5
 min_px_dist: 8
 knn_ratio: 0.70
-track_frequency: 20.0
+track_frequency: 35.0
 downsample_cameras: false
 num_opencv_threads: 2
 # true(업스트림 기본)여도 동작은 한다. false 로 두는 건 취향이 아니라 종료 안정성 때문 —
