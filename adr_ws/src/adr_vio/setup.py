@@ -23,6 +23,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'vio_metrics = adr_vio.metrics:main',
             'vio_align = adr_vio.vio_align:main',
         ],
     },

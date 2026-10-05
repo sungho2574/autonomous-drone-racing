@@ -25,6 +25,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'flight_recorder = adr_bringup.flight_recorder:main',
             'gate_markers = adr_bringup.gate_markers:main',
             'px4_odom_to_tf = adr_bringup.px4_odom_to_tf:main',
             'mocap_bridge = adr_bringup.mocap_bridge:main',

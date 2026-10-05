@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Flight review · ADR</title>
+    <link rel="stylesheet" href="/static/vendor/uPlot.min.css" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="logo">↗</span>
+        <div>ADR <small>FLIGHT REVIEW</small></div>
+      </div>
+      <div class="side-heading">
+        비행 기록 <button id="refresh" title="기록 새로고침">↻</button>
+      </div>
+      <input
+        id="search"
+        type="search"
+        placeholder="트랙 / 날짜 검색"
+        aria-label="기록 검색"
+      />
+      <nav id="runs"></nav>
+      <footer>LOCAL FLIGHT ARCHIVE<br />ROS 2 · OpenVINS</footer>
+    </aside>
+    <main>
+      <header>
+        <button id="collapse" aria-label="사이드바 접기" aria-expanded="true">
+          ☰</button
+        ><span>Flight diagnostics</span
+        ><span class="live-label">OFFLINE REVIEW</span>
+      </header>
+      <section id="empty">
+        <span class="eyebrow">FLIGHT INTELLIGENCE</span>
+        <h1>비행을 다시 살펴보세요.</h1>
+        <p>
+          왼쪽에서 기록을 선택하면 게이트 통과점과 진단 그래프를 표시합니다.
+        </p>
+        <p class="muted">새 비행은 flight_logs에 자동 저장됩니다.</p>
+      </section>
+      <div id="report" hidden>
+        <div class="report-heading">
+          <div>
+            <span class="eyebrow">FLIGHT REPORT</span>
+            <h1 id="title"></h1>
+            <p id="date" class="muted"></p>
+          </div>
+          <button id="reload">기록 다시 읽기</button>
+        </div>
+        <div id="summary"></div>
+        <div id="warnings"></div>
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <h2>게이트 통과점</h2>
+              <p>
+                정면 기준 · 계획 통과 시각 주변의 게이트 평면 교차점 · ×는 큰
+                위치 점프
+              </p>
+            </div>
+            <div class="actions">
+              <button id="copy">이미지 복사</button
+              ><a id="download" download="gate-passages.png">PNG 저장 ↗</a>
+            </div>
+          </div>
+          <img
+            id="gates"
+            alt="각 게이트의 계획, 실제, 보정 VIO, raw VIO 통과점"
+          />
+          <p class="footnote">
+            점이 없으면 해당 시간 구간에 평면 교차가 없거나 데이터가 부족한
+            것입니다. Raw VIO는 최초 map 정렬 후, PnP 보정 전 궤적입니다.
+          </p>
+        </section>
+        <div class="chart-heading">
+          <h2>비행 진단</h2>
+          <span>호버 동기화 · 드래그로 확대 · 더블클릭으로 초기화</span>
+        </div>
+        <div id="charts"></div>
+        <details class="panel">
+          <summary>기록 메타데이터 · 상태 전이</summary>
+          <pre id="metadata"></pre>
+        </details>
+      </div>
+      <div id="toast" role="status"></div>
+    </main>
+    <script src="/static/vendor/uPlot.iife.min.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

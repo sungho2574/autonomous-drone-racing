@@ -244,3 +244,9 @@ PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙�
 | 게이트가 rviz 와 gz 에서 다른 곳에 있음 | T1 과 T2 의 `map:=` 이 다르다. 두 터미널의 `[map]` 로그 줄을 비교할 것 |
 
 자세한 내용은 [docs/step1_architecture.md](docs/step1_architecture.md).
+
+## 비행 기록 및 분석
+
+`step1.launch.py`는 기본적으로 매 비행을 루트 `flight_logs/`에 기록한다.
+OpenVINS 진단 토픽, 시작 시 설정/맵 메타데이터, 비행 bag와 게이트 통과점 분석을 제공한다.
+다크 테마 Flask/uPlot 뷰어 실행 및 수치 해석: [Flight review](scripts/flight_review/README.md).

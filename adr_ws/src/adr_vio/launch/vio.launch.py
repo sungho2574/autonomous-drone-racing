@@ -18,9 +18,12 @@
                (step1.launch.py 로 띄우면 거기의 map 이 그대로 넘어온다)
   config     : estimator_config.yaml 경로 (기본 adr_vio/config)
   align_mode : yaw | se3 | none  (vio_align 정렬 방식)
+  profile    : default | slam_dense (SLAM 예산 비교용, loop closure 아님)
+  timing_path: 처리 시간 CSV 경로 (빈 값이면 estimator 설정 유지; 실행마다 다른 파일 권장)
   verbosity  : OpenVINS 로그 레벨 (ALL/DEBUG/INFO/WARNING/ERROR/SILENT)
 """
 import os
+import yaml
 
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from launch import LaunchDescription
@@ -40,6 +43,23 @@ def _nodes(context, *args, **kwargs):
     # 추론해 주긴 하지만("true"→bool), C++ 노드는 타입이 어긋나면 그 자리에서 죽으므로 명시한다.
     def arg(name):
         return LaunchConfiguration(name).perform(context)
+
+    profile = arg('profile')
+    if profile not in ('default', 'slam_dense'):
+        raise RuntimeError(f'알 수 없는 VIO profile: {profile} (default | slam_dense)')
+    # v2.7 opencv_yaml_parse supports typed ROS parameter overrides. Keep camera,
+    # noise, tracking rate, clone window and initialization from the user's YAML.
+    overrides = {} if profile == 'default' else {
+        'max_slam': 100,
+        'max_slam_in_update': 50,  # sequential-update batch size, NOT per-frame total
+    }
+    timing_path = arg('timing_path')
+    if timing_path:
+        timing_path = os.path.abspath(os.path.expanduser(timing_path))
+        # OpenVINS truncates its timing file. Require a fresh destination.
+        if os.path.exists(timing_path):
+            raise RuntimeError(f'VIO timing 파일이 이미 있습니다. 새 경로를 사용하세요: {timing_path}')
+        overrides.update(record_timing_information=True, record_timing_filepath=timing_path)
 
     world = arg('world')
     use_sim_time = arg('use_sim_time').lower() in ('true', '1')
@@ -66,8 +86,14 @@ def _nodes(context, *args, **kwargs):
     config = LaunchConfiguration('config').perform(context)
     if not os.path.exists(config):
         raise RuntimeError(f'estimator_config.yaml 없음: {config}')
+    with open(config) as f:
+        config_values=yaml.safe_load('\n'.join(line for line in f if not line.startswith('%YAML')))
+    capacity=overrides.get('max_slam',config_values.get('max_slam',0))
     nodes += [
-        LogInfo(msg=f'[vio] IMU {imu_gz} → /adr/imu,  OpenVINS config={config}'),
+        Node(package='adr_vio',executable='vio_metrics',name='vio_metrics',output='screen',
+             parameters=[{'timing_path':timing_path,'slam_capacity':int(capacity),**sim_time}]),
+        LogInfo(msg=f'[vio] IMU {imu_gz} → /adr/imu, OpenVINS config={config}, '
+                    f'profile={profile}, overrides={overrides}'),
         Node(package='ov_msckf', executable='run_subscribe_msckf', name='ov_msckf',
              namespace='ov_msckf', output='screen',
              parameters=[{
@@ -76,6 +102,7 @@ def _nodes(context, *args, **kwargs):
                  'use_stereo': False,
                  'max_cameras': 1,
                  'save_total_state': False,
+                 **overrides,
                  **sim_time,
              }],
              # 특징점 디버그 영상. OpenVINS 는 이 퍼블리셔의 구독자가 0 이면 아예 그리지 않는다
@@ -96,6 +123,8 @@ def generate_launch_description():
         DeclareLaunchArgument('world', default_value='cross'),
         DeclareLaunchArgument('imu_bridge', default_value='true'),
         DeclareLaunchArgument('verbosity', default_value='INFO'),
+        DeclareLaunchArgument('profile', default_value='default'),
+        DeclareLaunchArgument('timing_path', default_value=''),
         DeclareLaunchArgument('align_mode', default_value='yaw'),
         DeclareLaunchArgument('config', default_value=os.path.join(VIO_SHARE, 'config', 'estimator_config.yaml')),
         OpaqueFunction(function=_nodes),
