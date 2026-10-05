@@ -79,6 +79,7 @@ def generate_launch_description():
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
         DeclareLaunchArgument('v_avg', default_value='3.0'),
         DeclareLaunchArgument('a_max', default_value='8.0'),
+        DeclareLaunchArgument('heading_mode', default_value='perception_aware'),
 
         # ---- 이전 실행 잔재 정리. 반드시 우리 노드를 띄우기 전에! ----
         # 고아 노드가 남으면 latched 토픽(/adr/trajectory, /adr/planned_path)의 퍼블리셔가 둘이 되어
@@ -90,6 +91,7 @@ def generate_launch_description():
                          {'laps': LaunchConfiguration('laps'),
                           'v_avg': LaunchConfiguration('v_avg'),
                           'a_max': LaunchConfiguration('a_max'),
+                          'heading_mode': LaunchConfiguration('heading_mode'),
                           'gates_file': gates_file,
                           **sim_time}],
              output='screen'),

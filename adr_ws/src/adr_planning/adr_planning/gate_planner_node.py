@@ -3,6 +3,7 @@
 한 번 계산해 transient_local 로 latch 하므로 컨트롤러가 나중에 떠도 받는다.
 """
 import os
+from dataclasses import fields
 import time
 
 import numpy as np
@@ -16,6 +17,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 from adr_planning.course import course_waypoints, load_course
 from adr_planning.min_snap import Trajectory, plan
+from adr_planning.perception_heading import HeadingOptions, perception_aware_heading
 
 LATCHED = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                      durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -56,6 +58,11 @@ class GatePlanner(Node):
         self.declare_parameter('end_at_start', True)
         self.declare_parameter('path_dt', 0.05)
         self.declare_parameter('frame_id', 'map')
+        self.declare_parameter('heading_mode', 'perception_aware')
+        defaults = HeadingOptions()
+        for field in fields(defaults):
+            value = getattr(defaults, field.name)
+            self.declare_parameter('heading_' + field.name, list(value) if isinstance(value, tuple) else value)
 
         # 빈 값이면 기본 맵. launch 는 map:= 에서 이 경로를 만들어 넘긴다.
         gates_file = self.get_parameter('gates_file').value or os.path.join(
@@ -81,6 +88,25 @@ class GatePlanner(Node):
                     v_max=float(self.get_parameter('v_max').value),
                     a_max=float(self.get_parameter('a_max').value),
                     t_min=float(self.get_parameter('t_min').value))
+        heading_mode = self.get_parameter('heading_mode').value
+        if heading_mode == 'perception_aware':
+            options = HeadingOptions(**{field.name: self.get_parameter('heading_' + field.name).value
+                                        for field in fields(HeadingOptions)})
+            traj, report = perception_aware_heading(
+                traj, course, laps, float(self.get_parameter('approach_dist').value),
+                bool(self.get_parameter('end_at_start').value), options)
+            self.get_logger().info(
+                f"perception heading: full-gate visibility {report['baseline']['visible_fraction']:.1%}"
+                f" → {report['planned']['visible_fraction']:.1%}, "
+                f"baseline at same duration {report['baseline_matched_time']['visible_fraction']:.1%}, "
+                f"centered {report['planned']['centered_fraction']:.1%}, "
+                f"time ×{report['time_stretch']:.2f}, "
+                f"yaw rate {report['max_rate_deg']:.1f} deg/s, "
+                f"yaw acceleration {report['max_accel_deg']:.1f} deg/s² (predicted, not flown)")
+            if report['planned']['visible_fraction'] < 1.0:
+                self.get_logger().warn('시야 밖 구간이 남아 있습니다. yaw만으로 수직 FOV·통과 직전 잘림은 해결할 수 없습니다.')
+        elif heading_mode != 'gate_normal':
+            raise ValueError('heading_mode must be perception_aware or gate_normal')
         dt_plan = time.time() - t_plan
         v_pk, a_pk = traj.peak()
         self.get_logger().info(
@@ -88,8 +114,7 @@ class GatePlanner(Node):
             f'T={traj.duration:.1f}s, v_peak={v_pk:.2f} m/s, a_peak={a_pk:.2f} m/s^2')
         if dt_plan > 3.0:
             self.get_logger().warn(
-                f'계획에 {dt_plan:.1f}초 걸렸다. 세그먼트({len(traj.segments)})가 많으면 '
-                f'급격히 느려진다 — laps 를 줄이거나 approach_dist 를 0 으로 두면 세그먼트가 1/3 이 된다.')
+                f'계획 및 시야 평가에 {dt_plan:.1f}초 걸렸다. laps 또는 heading_sample_dt로 계산량을 조절할 수 있다.')
 
         self.traj_pub = self.create_publisher(PolynomialTrajectory, '/adr/trajectory', LATCHED)
         self.path_pub = self.create_publisher(Path, '/adr/planned_path', LATCHED)

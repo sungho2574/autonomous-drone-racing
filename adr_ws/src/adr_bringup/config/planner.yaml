@@ -10,3 +10,19 @@ gate_planner:
     end_at_start: true    # 마지막에 이륙 호버점으로 복귀
     path_dt: 0.05         # rviz Path 샘플 간격 [s]
     frame_id: map
+    # Spec §3.2: offline gate-bearing heading overlay; gate_normal restores old yaw.
+    heading_mode: perception_aware
+    heading_d_min: 1.0
+    heading_d_max: 8.0
+    heading_lambda_g: 0.95
+    heading_sample_dt: 0.1
+    heading_smoothing_time: 0.3
+    heading_max_rate_deg: 0.0     # 0: 제한 없음, yaw 때문에 전체 감속하지 않음
+    heading_max_accel_deg: 0.0    # 0: 제한 없음
+    heading_center_tolerance_deg: 10.0
+    # Match adr_sim/config/racer_spec.yaml camera (real camera: use calibration).
+    heading_hfov_deg: 90.0
+    heading_camera_width: 640
+    heading_camera_height: 480
+    heading_camera_tilt_deg: 20.0
+    heading_camera_xyz: [0.045, 0.0, 0.022]

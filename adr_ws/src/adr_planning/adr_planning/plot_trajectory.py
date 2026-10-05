@@ -8,6 +8,7 @@ import numpy as np
 
 from adr_planning.course import course_waypoints, load_course
 from adr_planning.min_snap import plan
+from adr_planning.perception_heading import perception_aware_heading
 
 
 def main():
@@ -18,20 +19,28 @@ def main():
     ap.add_argument('--v-avg', type=float, default=3.0)
     ap.add_argument('--v-max', type=float, default=6.0)
     ap.add_argument('--a-max', type=float, default=8.0)
+    ap.add_argument('--heading-mode', choices=['perception_aware', 'gate_normal'], default='perception_aware')
     ap.add_argument('--save', default=None, help='png 저장 경로 (없으면 화면 표시)')
     args = ap.parse_args()
 
     course = load_course(args.gates)
     wp, yaw = course_waypoints(course, args.laps, args.approach)
     tr = plan(wp, yaw, v_avg=args.v_avg, v_max=args.v_max, a_max=args.a_max)
+    if args.heading_mode == 'perception_aware':
+        tr, report = perception_aware_heading(tr, course, args.laps, args.approach)
+        print(f'Heading: {report}')
     s = tr.sample_all(0.02)
     v_pk, a_pk = tr.peak()
     print(f'T={tr.duration:.2f}s  v_peak={v_pk:.2f}  a_peak={a_pk:.2f}')
 
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(17, 5))
     ax[0].plot(s[:, 1], s[:, 2], label='min-snap')
     ax[0].plot(wp[:, 0], wp[:, 1], 'k.', label='waypoints')
+    arrows = s[::max(1, len(s)//55)]
+    ax[0].quiver(arrows[:, 1], arrows[:, 2], np.cos(arrows[:, 10]), np.sin(arrows[:, 10]),
+                 color='tab:blue', angles='xy', scale_units='xy', scale=1.3, width=.004)
+    ax[0].set_title(args.heading_mode + ' / heading arrows')
     half = course.inner_size / 2
     for g in course.gates:
         t = np.array([-np.sin(g.yaw), np.cos(g.yaw)]) * half
@@ -42,6 +51,9 @@ def main():
     ax[1].plot(s[:, 0], np.linalg.norm(s[:, 7:10], axis=1), label='|a|')
     ax[1].plot(s[:, 0], s[:, 3], label='z')
     ax[1].set_xlabel('t [s]'); ax[1].legend(); ax[1].grid()
+    ax[2].plot(s[:, 0], np.degrees(s[:, 10]), label='yaw [deg]')
+    ax[2].plot(s[:, 0], np.degrees(s[:, 11]), label='yaw rate [deg/s]')
+    ax[2].set_xlabel('t [s]'); ax[2].legend(); ax[2].grid()
     fig.tight_layout()
     if args.save:
         fig.savefig(args.save, dpi=120)

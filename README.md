@@ -183,6 +183,25 @@ ros2 launch adr_bringup step1.launch.py map:=inverted_loop v_avg:=2.0 a_max:=5.0
 
 자세한 내용은 [docs §4](docs/step1_architecture.md#4-코스-정의--맵-configmapsyaml).
 
+#### Perception-aware heading
+
+기본 `heading_mode:=perception_aware`는 다음 통과 대상 게이트를 바라보도록 yaw를 계획한다.
+게이트 간 거리 가중치와 이동 방향을 혼합하고, 전환 전에 부드럽게 회전을 시작한다.
+xyz 공간 경로와 계획 시간을 유지한다. yaw 속도/가속도 제한은 기본 0(비활성)이며 전체 감속하지 않는다.
+설정은 `adr_ws/src/adr_bringup/config/planner.yaml`의 `heading_*`에 있다.
+
+```bash
+ros2 launch adr_bringup step1.launch.py map:=big_track heading_mode:=perception_aware
+# 기존 게이트 법선 yaw와 비교
+ros2 launch adr_bringup step1.launch.py map:=big_track heading_mode:=gate_normal
+```
+
+계획 로그에 예측 전체 게이트 가시율, 중앙 정렬 비율, 시간 배율, 최대 yaw 속도/가속도를 출력한다.
+카메라 모델 기반의 예측이며 실제 비행 검증은 별도다. yaw만으로 모든 구간의 수직 시야와 화면 잘림을
+해결하지는 않는다. 선택적으로 `heading_max_rate_deg` / `heading_max_accel_deg`를 양수로 설정하면
+해당 제한에 맞춰 전체 계획 시간을 늘린다.
+자세한 구현 범위는 [설계 문서 §3.2](docs/kaist_drone_racing_ros2_spec.md#32-perception-aware-heading-planning) 참고.
+
 #### 새 맵 추가
 
 ```bash

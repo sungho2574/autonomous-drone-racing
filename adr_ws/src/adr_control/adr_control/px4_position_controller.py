@@ -50,6 +50,8 @@ class PositionController(OffboardBase):
         self.land_after = bool(self.get_parameter('land_after').value)
         self.hold_time = float(self.get_parameter('hold_time').value)
         self.time_scale = float(self.get_parameter('time_scale').value)
+        if not np.isfinite(self.time_scale) or self.time_scale <= 0:
+            raise ValueError('time_scale must be finite and positive')
 
         self.traj: Trajectory | None = None
         self.state = 'WAIT_TRAJ'
@@ -140,6 +142,8 @@ class PositionController(OffboardBase):
         elif s == 'TRACK':
             self._t_traj += dt * self.time_scale
             p, v, a, yaw, yr = self.traj.sample(self._t_traj)
+            # Derivatives are with respect to plan time; convert to wall/sim time.
+            v, a, yr = v * self.time_scale, a * self.time_scale**2, yr * self.time_scale
             if self.feedforward:
                 self.publish_offboard_mode(position=True, velocity=True, acceleration=True)
                 self.publish_trajectory_setpoint(p, v, a, yaw, yr)
