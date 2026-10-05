@@ -23,6 +23,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 from adr_bringup.launch_cleanup import kill_stale
 from adr_bringup.flight_session import new_session, repository_root
@@ -134,7 +135,7 @@ def generate_launch_description():
              output='screen'),
         Node(package='adr_control', executable='px4_position_controller', name='px4_position_controller',
              parameters=[os.path.join(control_share, 'config', 'controller.yaml'),
-                         {'time_scale': LaunchConfiguration('time_scale'),
+                         {'time_scale': ParameterValue(LaunchConfiguration('time_scale'), value_type=float),
                           'land_after': LaunchConfiguration('land_after'),
                           'origin_mode': LaunchConfiguration('origin_mode'),
                           # origin_mode=start 일 때 start 좌표를 여기서 읽는다 — planner 와 같은 맵이어야 한다
