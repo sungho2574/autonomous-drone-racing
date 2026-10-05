@@ -10,9 +10,9 @@
 옆으로 흩어지는 것도 그대로 보인다. rviz 의 빨간 flown_path(실제 비행)와 겹쳐 보면 편차가 드러난다.
 
 대상 게이트 고르기
-  이미지 시각의 보정 VIO pose로 맵의 게이트를 투영하여 코너를 연결한다.
+  이미지 시각의 GT pose로 맵의 게이트를 투영하여 코너를 연결한다.
   주행 순서와 관측 ID는 별개이며, 모호한 연결은 보정에 사용하지 않는다.
-  /adr/odom은 시각화 오차 평가와 주행 순서 계측에만 사용한다.
+  /adr/odom은 GT 매칭 prior, 시각화 오차 평가와 주행 순서 계측에 사용한다.
 
 정밀도 — 단일 평면 타겟이라 거리가 멀수록 급격히 나빠진다 (1 px 노이즈, 중앙값):
   2.5 m: 횡방향 0.05 m / 자세 1.0°    3 m: 0.09 m / 1.6°
@@ -63,10 +63,10 @@ class GatePnP(Node):
         self.declare_parameter('cam_xyz', [0.045, 0.0, 0.022])
         self.declare_parameter('cam_tilt_deg', 20.0)        # 위쪽 틸트(+). racer_spec.yaml 의 camera.tilt_deg 와 같아야 함
         self.declare_parameter('max_reproj_px', 3.0)        # 재투영오차 상한
-        # 이미지 시각 VIO prior와 이만큼 넘게 벌어지면 '다른 게이트를 본 것'으로 보고 버린다.
+        # 이미지 시각 GT prior와 이만큼 넘게 벌어지면 '다른 게이트를 본 것'으로 보고 버린다.
         # PnP 오차(수십 cm)보다 훨씬 크게 잡아 성능 측정을 왜곡하지 않게 한다. 0 이면 끔.
-        self.declare_parameter('max_odom_gap', 5.0)  # historical name: now measured against VIO prior
-        self.declare_parameter('prior_topic', '/adr/state/corrected')
+        self.declare_parameter('max_odom_gap', 5.0)  # historical name: measured against the configured pose prior
+        self.declare_parameter('prior_topic', '/adr/odom')
         self.declare_parameter('prior_max_gap_s', 0.2)
         self.declare_parameter('prior_wait_s', 0.25)
         self.declare_parameter('detector_debug_topic', '/adr/perception/debug_image')
@@ -281,7 +281,7 @@ class GatePnP(Node):
             gap = float(np.linalg.norm(p - prior[:3, 3]))
             if gap > self.max_gap:
                 self._diagnostic(msg, 'pnp_innovation', match)
-                self._warn_throttled(f'PnP 기각: VIO prior와 {gap:.1f} m 차이 — '
+                self._warn_throttled(f'PnP 기각: pose prior와 {gap:.1f} m 차이 — '
                                      f'게이트 {g.id} 이 아닌 다른 게이트를 봤을 가능성')
                 return
 

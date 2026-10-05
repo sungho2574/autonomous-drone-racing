@@ -349,7 +349,7 @@ function renderCharts(all) {
       "검출 수와 corner 유효 검출 수",
       ["gate_detections", "gate_valid_quads"],
     ],
-    ["게이트 ID 매칭 오차", "px", "보정 VIO로 투영한 코너 대비 오차. 차선과 비슷하면 기각합니다.",
+    ["게이트 ID 매칭 오차", "px", "기록 당시 설정된 prior로 투영한 코너 대비 오차. 차선과 비슷하면 기각합니다.",
       ["pnp_assoc_best_px", "pnp_assoc_second_px", "pnp_assoc_max_corner_px", "pnp_assoc_limit_px", "pnp_assoc_margin_px"]],
     ["게이트 ID 매칭 결과", "ID", "주행 목표와 관측 ID는 별개입니다. 채택 ID 0은 보정하지 않은 프레임입니다.",
       ["pnp_assoc_selected_id", "pnp_assoc_best_id", "pnp_assoc_second_id"]],
