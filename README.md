@@ -217,6 +217,14 @@ colcon build --symlink-install --packages-select adr_bringup adr_sim
 
 `sim.launch.py` 옵션: `ev:=false`(진실값 주입 대신 GPS 시뮬, airframe 4030 — 이때 T2 에 `origin_mode:=start` 필요) · `gui:=false`(headless) · `rviz:=false` · `soft_gl:=0`(GPU 있는 머신) · `agent:=micro-xrce-dds-agent`(snap 설치본) · `px4_dir:=...`
 
+프로세스가 남았으면 저장소 루트에서 `python3 scripts/kill_sim.py`로 ADR launch와 자식 노드,
+Gazebo, PX4 SITL, 8888 포트 XRCE agent를 정리한다. 같은 사용자의 다른 Gazebo 월드도 종료된다.
+`--dry-run`은 대상만 표시하고, `--include-viewers`는 rqt와 모든 RViz도 포함한다.
+SIGINT → SIGTERM → SIGKILL 순으로 종료하며, ROS 환경 설정이나 재빌드는 필요 없다.
+렌더링 기본값은 GPU(`soft_gl:=0`)이며, GPU 모드에서는 부모 셸의 `LIBGL_ALWAYS_SOFTWARE`와
+`GALLIUM_DRIVER` 강제 설정도 제거한다. GPU 없는 VM에서는 `soft_gl:=1`을 사용한다.
+`ADR_SOFT_GL` 환경 변수가 있으면 기본값을 덮어쓰며, 명시적인 launch 인자가 우선한다.
+
 PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙는다: `~/PX4-Autopilot/build/px4_sitl_default/bin/px4-commander check`, `px4-param set MPC_XY_VEL_MAX 5`.
 
 ## 자주 막히는 곳
@@ -225,7 +233,7 @@ PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙�
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `colcon build` 가 px4_msgs 에서 실패            | submodule 미초기화. `git submodule update --init --recursive`                                                                                              |
 | 노드는 뜨는데 arm/offboard 로 안 넘어감         | `/fmu/out/*` 미수신. px4_msgs 와 PX4 버전이 맞는지 확인. 토픽 이름에 `_v4`/`_v1` 같은 접미사가 붙으므로 `ros2 topic list \| grep fmu` 로 실제 이름을 볼 것 |
-| gz 가 `Ogre::UnimplementedException` 으로 abort | GPU 없는 VM. `sim.launch.py` 기본값 `soft_gl:=1` 이 llvmpipe 를 강제한다. GPU 있으면 `soft_gl:=0`                                                          |
+| gz 가 `Ogre::UnimplementedException` 으로 abort | GPU 없는 VM이면 `soft_gl:=1`로 llvmpipe를 사용한다. 기본값은 GPU 렌더링(`soft_gl:=0`). |
 | gz 가 `ign gazebo --force-version 6` 으로 뜸    | apt 의 Fortress 용 ros_gz 가 잡힘. Harmonic 워크스페이스를 먼저 source                                                                                     |
 | `Unknown message type [9]`                      | 위와 동일 (브릿지가 Fortress 판)                                                                                                                           |
 | PX4 가 `no autostart file found (…/4030_*)`     | `px4_dir` 가 잘못됐거나 `make px4_sitl` 미완료. launch 로그의 `[px4] … airframes→` 줄 확인                                                                 |

@@ -19,7 +19,7 @@
   rviz      : rviz2 실행
   px4_dir   : PX4-Autopilot 위치 (기본 $PX4_DIR 또는 ~/PX4-Autopilot). make px4_sitl 이 끝나 있어야 함
   agent     : DDS 에이전트 실행 파일 (소스 빌드: MicroXRCEAgent, snap: micro-xrce-dds-agent)
-  soft_gl   : 1 이면 llvmpipe 소프트웨어 렌더링 (GPU 없는 VM). 기본 $ADR_SOFT_GL 또는 1
+  soft_gl   : 0 이면 GPU 렌더링, 1 이면 llvmpipe (GPU 없는 VM). 기본 $ADR_SOFT_GL 또는 0
 
 PX4 기동 방식 (ARMS 의 px4_sitl.launch.py 와 같은 패턴, 셸 스크립트 없음)
   - assets/px4/airframes/* 를 매번 $PX4_DIR/build/px4_sitl_default/etc/init.d-posix/airframes/ 에 복사
@@ -41,7 +41,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument, ExecuteProcess,
                             IncludeLaunchDescription, LogInfo, OpaqueFunction,
-                            SetEnvironmentVariable)
+                            SetEnvironmentVariable, UnsetEnvironmentVariable)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution,
@@ -197,7 +197,7 @@ def generate_launch_description():
         DeclareLaunchArgument('px4_dir', default_value=EnvironmentVariable(
             'PX4_DIR', default_value=os.path.expanduser('~/PX4-Autopilot'))),
         DeclareLaunchArgument('agent', default_value='MicroXRCEAgent'),
-        DeclareLaunchArgument('soft_gl', default_value=EnvironmentVariable('ADR_SOFT_GL', default_value='1')),
+        DeclareLaunchArgument('soft_gl', default_value=EnvironmentVariable('ADR_SOFT_GL', default_value='0')),
 
         # ---- 맵/월드 확인 (아무것도 띄우기 전에 원인을 알려주고 멈춘다) ----
         OpaqueFunction(function=_check_map),
@@ -206,6 +206,11 @@ def generate_launch_description():
 
         # ---- 환경: 모델 검색 경로, 소프트웨어 GL ----
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', str(ASSETS / 'models')),
+        # GPU 모드에서는 부모 셸의 소프트웨어 렌더링 강제 설정도 제거한다.
+        UnsetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE',
+                                 condition=IfCondition(PythonExpression(["'", soft_gl, "' == '0'"]))),
+        UnsetEnvironmentVariable('GALLIUM_DRIVER',
+                                 condition=IfCondition(PythonExpression(["'", soft_gl, "' == '0'"]))),
         SetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE', '1',
                                condition=IfCondition(PythonExpression(["'", soft_gl, "' == '1'"]))),
         SetEnvironmentVariable('GALLIUM_DRIVER', 'llvmpipe',
