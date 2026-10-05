@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO / "adr_ws/src/adr_bringup"))
 from adr_bringup.flight_session import new_session, atomic_json
 
 
-def make_bag(root, gates=6, status="completed", include_tracker=True, include_association=False):
+def make_bag(root, gates=6, status="completed", include_tracker=True, include_association=False, include_pnp=False):
     course = {
         "gate": {"inner_size": 1.5, "outer_size": 2.1},
         "gates": [
@@ -79,6 +79,13 @@ def make_bag(root, gates=6, status="completed", include_tracker=True, include_as
         "/adr/controller_state", msg("std_msgs/msg/String", "TRACK t_traj=0.00"), 100.0
     )
     duration = gates * 3 + 2.0
+    if include_pnp:
+        for t, frame in [(100.25, "map"), (100.5, "other_frame")]:
+            h = header(t)
+            h.frame_id = frame
+            write("/adr/pnp/gate", msg("adr_msgs/msg/GatePnP", h, 2,
+                  msg("geometry_msgs/msg/Point", 1.0, 2.0, 3.0),
+                  0.8, 0.5, 4.0), t)
     seg = msg(
         "adr_msgs/msg/PolynomialSegment",
         duration,

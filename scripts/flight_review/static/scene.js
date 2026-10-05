@@ -121,8 +121,11 @@ export class FlightScene {
       };
       group.visible = input.checked;
     }
+    this.addPnp(data.pnp || [], controls);
     this.addGates(data);
     this.bounds = new THREE.Box3();
+    for (const r of this.pnpRows)
+      this.bounds.expandByPoint(new THREE.Vector3(r[1], r[2], r[3]));
     for (const g of data.gates)
       this.bounds.expandByPoint(new THREE.Vector3(g.x, g.y, g.z));
     for (const item of Object.values(this.items))
@@ -147,6 +150,35 @@ export class FlightScene {
     this.resizeView();
     this.fit();
     this.setTime(data.initial_time);
+  }
+  addPnp(rows, controls) {
+    this.pnpRows = rows;
+    const vertices = [], h = 0.12;
+    for (const [, x, y, z] of rows)
+      vertices.push(x-h, y-h, z, x+h, y+h, z,
+                    x-h, y+h, z, x+h, y-h, z);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    this.pnpMarks = new THREE.LineSegments(
+      geometry, new THREE.LineBasicMaterial({ color: "#36d9ff" }),
+    );
+    this.scene.add(this.pnpMarks);
+    const label = document.createElement("label");
+    label.className = "series-toggle";
+    label.style.setProperty("--series-color", "#36d9ff");
+    label.title = "PnP에서 채택된 위치 전체. 보정 필터 사용 여부와는 별개입니다.";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = rows.length > 0;
+    input.disabled = !rows.length;
+    input.setAttribute("aria-label", "3D PnP measurements");
+    label.append(input, document.createTextNode(`PnP × (${rows.length})`));
+    controls.append(label);
+    this.pnpMarks.visible = input.checked;
+    input.onchange = () => {
+      this.pnpMarks.visible = input.checked;
+      this.render();
+    };
   }
   addGates(data) {
     const outer = data.gate.outer_size,
@@ -197,6 +229,9 @@ export class FlightScene {
   }
   fit(top = false) {
     const box = new THREE.Box3();
+    if (this.pnpMarks.visible)
+      for (const r of this.pnpRows)
+        box.expandByPoint(new THREE.Vector3(r[1], r[2], r[3]));
     for (const g of this.data.gates) {
       box.expandByPoint(
         new THREE.Vector3(g.x, g.y, g.z - this.data.gate.outer_size / 2),

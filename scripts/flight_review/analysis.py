@@ -45,6 +45,7 @@ def bag_rows(folder):
         "/adr/vio/metrics",
         "/ov_msckf/tracking_metrics",
         "/adr/pnp/association",
+        "/adr/pnp/gate",
         "/adr/controller_state",
         "/adr/trajectory",
     }
@@ -86,6 +87,7 @@ def load_flight(folder):
     metrics = []
     tracker_metrics = []
     association_metrics = []
+    pnp = []
     poses = {k: [] for k in ("actual", "raw", "corrected")}
     states = []
     poly = None
@@ -104,6 +106,11 @@ def load_flight(folder):
             row = [stamp(msg.header), p.x, p.y, p.z, q.w, q.x, q.y, q.z]
             if all(math.isfinite(float(x)) for x in row):
                 poses[POSE_TOPICS[topic]].append(row)
+        elif topic == "/adr/pnp/gate":
+            p = msg.pos_w
+            row = [stamp(msg.header), p.x, p.y, p.z, int(msg.gate_id)]
+            if msg.header.frame_id == "map" and all(math.isfinite(float(x)) for x in row):
+                pnp.append(row)
         elif topic in ("/adr/vio/metrics", "/ov_msckf/tracking_metrics", "/adr/pnp/association"):
             values = {}
             for status in msg.status:
@@ -124,6 +131,7 @@ def load_flight(folder):
     metrics = sorted({t: v for t, v in metrics}.items())
     source_times = [r[0] for rows in poses.values() for r in rows]
     source_times += [t for t, _ in association_metrics]
+    source_times += [r[0] for r in pnp]
     source_times += [t for t, _ in metrics] + [t for t, _ in tracker_metrics]
     if not source_times:
         raise ValueError(
@@ -256,6 +264,7 @@ def load_flight(folder):
         meta=meta,
         course=course,
         poses=poses,
+        pnp=sorted(pnp, key=lambda r: r[0]),
         plan=plan,
         origin=origin,
         track_start=start,
@@ -492,6 +501,7 @@ def scene_data(data):
         "gates": data["course"]["gates"],
         "gate": data["course"]["gate"],
         "trajectories": trajectories,
+        "pnp": [[r[0] - origin, *r[1:]] for r in data.get("pnp", [])],
         "plan_time_aligned": aligned,
         "plan_max_gap_s": max(
             0.3, 0.021 / float(data["meta"]["parameters"].get("time_scale", 1))

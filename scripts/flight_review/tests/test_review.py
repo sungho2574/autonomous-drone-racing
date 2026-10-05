@@ -25,6 +25,16 @@ from adr_bringup.flight_session import new_session, repository_root
 from fixture_bag import make_bag
 
 
+def test_pnp_measurements_in_scene(tmp_path):
+    data = load_flight(make_bag(tmp_path, include_pnp=True))
+    assert scene_data(data)["pnp"] == [[0.25, 1.0, 2.0, 3.0, 2]]
+    assert "pnp" not in data["poses"]  # Sparse measurements must not become interpolated poses.
+
+
+def test_old_bag_without_pnp(tmp_path):
+    assert scene_data(load_flight(make_bag(tmp_path)))["pnp"] == []
+
+
 def test_stale_rate_and_reset():
     store = MetricStore()
     store.put("features", 0, 10)
