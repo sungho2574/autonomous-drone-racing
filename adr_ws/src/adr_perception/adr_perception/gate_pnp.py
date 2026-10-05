@@ -10,9 +10,9 @@
 옆으로 흩어지는 것도 그대로 보인다. rviz 의 빨간 flown_path(실제 비행)와 겹쳐 보면 편차가 드러난다.
 
 대상 게이트 고르기
-  화면에서 가장 큰(=가장 가까운) 검출 1개만 쓴다. 그 검출이 '몇 번 게이트인지'는
-  다음 게이트 인덱스 상태기계로 정한다 — 오도메트리로 게이트 평면 통과를 감지해 진행시킨다.
-  (오도메트리는 '어느 게이트인지' 고르는 데만 쓴다. 포즈 추정 자체에는 안 들어간다.)
+  이미지 시각의 보정 VIO pose로 맵의 게이트를 투영하여 코너를 연결한다.
+  주행 순서와 관측 ID는 별개이며, 모호한 연결은 보정에 사용하지 않는다.
+  /adr/odom은 시각화 오차 평가와 주행 순서 계측에만 사용한다.
 
 정밀도 — 단일 평면 타겟이라 거리가 멀수록 급격히 나빠진다 (1 px 노이즈, 중앙값):
   2.5 m: 횡방향 0.05 m / 자세 1.0°    3 m: 0.09 m / 1.6°
@@ -22,6 +22,10 @@
   정면 접근 기준 수평 자세로 3 m 이상, 기수를 5° 숙이면 2 m 부터 4점이 잡힌다.
 """
 import os
+import time
+from collections import deque
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+from adr_perception.association import PoseBuffer, MatchConfig, project_gates, associate
 
 import numpy as np
 import rclpy
@@ -56,9 +60,14 @@ class GatePnP(Node):
         self.declare_parameter('cam_xyz', [0.045, 0.0, 0.022])
         self.declare_parameter('cam_tilt_deg', 20.0)        # 위쪽 틸트(+). racer_spec.yaml 의 camera.tilt_deg 와 같아야 함
         self.declare_parameter('max_reproj_px', 3.0)        # 재투영오차 상한
-        # 오도메트리와 이만큼 넘게 벌어지면 '다른 게이트를 본 것'으로 보고 버린다.
+        # 이미지 시각 VIO prior와 이만큼 넘게 벌어지면 '다른 게이트를 본 것'으로 보고 버린다.
         # PnP 오차(수십 cm)보다 훨씬 크게 잡아 성능 측정을 왜곡하지 않게 한다. 0 이면 끔.
-        self.declare_parameter('max_odom_gap', 5.0)
+        self.declare_parameter('max_odom_gap', 5.0)  # historical name: now measured against VIO prior
+        self.declare_parameter('prior_topic', '/adr/state/corrected')
+        self.declare_parameter('prior_max_gap_s', 0.2)
+        self.declare_parameter('prior_wait_s', 0.25)
+        for name, value in vars(MatchConfig()).items():
+            self.declare_parameter('association_' + name, value)
         # quality 산출용 거리 구간 (논문 §2.3 의 거리 필터 τ_d_min/τ_d_max 와 같은 의미).
         # 논문 값은 1~13 m 지만 그건 실외 대형 트랙 기준이다. 이 코스는 반경 4 m 라 더 좁게 잡는다.
         self.declare_parameter('quality_dist_min', 1.0)
@@ -75,6 +84,15 @@ class GatePnP(Node):
         self.d_min = float(self.get_parameter('quality_dist_min').value)
         self.d_max = float(self.get_parameter('quality_dist_max').value)
 
+        self.match_config = MatchConfig(**{k: float(self.get_parameter('association_' + k).value) for k in vars(MatchConfig())})
+        self.priors = PoseBuffer(float(self.get_parameter('prior_max_gap_s').value))
+        self.pending = deque()
+        self.prior_wait = float(self.get_parameter('prior_wait_s').value)
+        if not np.isfinite([self.prior_wait, self.priors.max_gap]).all() or self.prior_wait <= 0 or self.priors.max_gap <= 0:
+            raise ValueError('Prior wait/gap must be finite and positive')
+        self.diag_pub = self.create_publisher(DiagnosticArray, '/adr/pnp/association', 10)
+        self.create_subscription(Odometry, self.get_parameter('prior_topic').value, self._on_prior, 50)
+        self.create_timer(0.02, self._drain)
         self.K = None
         self.D = None
         self.odom_p = None
@@ -115,6 +133,7 @@ class GatePnP(Node):
     def _on_info(self, m: CameraInfo):
         if self.K is None:
             self.K = np.array(m.k, dtype=float).reshape(3, 3)
+            self.width, self.height = m.width, m.height
             self.D = np.array(m.d, dtype=float) if len(m.d) else np.zeros(5)
             self.get_logger().info(f'camera_info: fx={self.K[0, 0]:.1f} fy={self.K[1, 1]:.1f} '
                                    f'cx={self.K[0, 2]:.1f} cy={self.K[1, 2]:.1f} {m.width}x{m.height}')
@@ -138,29 +157,93 @@ class GatePnP(Node):
         self._s_prev = s
 
     # ------------------------------------------------------------------ PnP
-    def _on_det(self, msg: GateDetectionArray):
-        if self.K is None:
+    @staticmethod
+    def _stamp(msg):
+        return msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+
+    def _on_prior(self, msg):
+        if msg.header.frame_id != self.frame_id:
             return
-        # 가장 큰(= id 0, 검출기가 면적 내림차순 정렬) 검출 중 꼭짓점이 확보된 것
-        det = next((d for d in msg.detections if d.has_corners), None)
-        if det is None:
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        self.priors.add(self._stamp(msg), [p.x, p.y, p.z], [q.x, q.y, q.z, q.w])
+        self._drain()
+
+    def _diagnostic(self, msg, reason, match=None, selected=0):
+        codes = {'accepted': 0, 'no_prior': 1, 'no_corners': 2, 'no_visible_gate': 3,
+                 'absolute_error': 4, 'ambiguous': 5, 'duplicate_id': 6,
+                 'pnp_reprojection': 7, 'pnp_innovation': 8, 'no_camera': 9}
+        values = {'pnp_assoc_reason': codes[reason], 'pnp_assoc_selected_id': selected,
+                  'pnp_assoc_accepted': int(reason == 'accepted')}
+        if match:
+            values.update(pnp_assoc_best_id=match['gate'].id, pnp_assoc_best_px=match['rmse'],
+                          pnp_assoc_max_corner_px=match['worst'], pnp_assoc_limit_px=match['limit'])
+            if match['second']:
+                values.update(pnp_assoc_second_id=match['second']['gate'].id,
+                              pnp_assoc_second_px=match['second']['rmse'],
+                              pnp_assoc_margin_px=match['second']['rmse']-match['rmse'])
+        status = DiagnosticStatus()
+        status.name, status.hardware_id, status.message = 'gate_association', 'adr_perception', reason
+        status.level = DiagnosticStatus.OK if reason == 'accepted' else DiagnosticStatus.WARN
+        status.values = [KeyValue(key=k, value=str(v)) for k, v in values.items()]
+        out = DiagnosticArray()
+        out.header = msg.header
+        out.status = [status]
+        self.diag_pub.publish(out)
+
+    def _on_det(self, msg):
+        if len(self.pending) >= 30:
+            old, _ = self.pending.popleft()
+            self._diagnostic(old, 'no_prior')
+        self.pending.append((msg, time.monotonic()))
+        self._drain()
+
+    def _drain(self):
+        while self.pending:
+            msg, received = self.pending[0]
+            prior = self.priors.sample(self._stamp(msg))
+            if prior is None and time.monotonic()-received < self.prior_wait:
+                return
+            self.pending.popleft()
+            if prior is None:
+                self._diagnostic(msg, 'no_prior')
+            else:
+                self._process_det(msg, prior)
+
+    def _process_det(self, msg, prior):
+        if self.K is None:
+            self._diagnostic(msg, 'no_camera')
+            return
+        detections = [np.array(d.corners, dtype=float).reshape(4, 2) for d in msg.detections if d.has_corners]
+        if not detections:
+            self._diagnostic(msg, 'no_corners')
             return
         self.n_try += 1
-        g = self.course.gates[self.next_i]
-        corners = np.array(det.corners, dtype=float).reshape(4, 2)
+        projected = project_gates(self.course.gates, self.course.inner_size, prior,
+                                  self.T_base_opt, self.K, self.D, self.width, self.height)
+        match = associate(detections, projected, self.match_config)
+        if match is None:
+            self._diagnostic(msg, 'no_visible_gate')
+            return
+        if match['reason'] != 'accepted':
+            self._diagnostic(msg, match['reason'], match)
+            return
+        g, corners = match['gate'], match['corners']
         T, err = drone_pose_in_map(corners, self.course.inner_size, self.K, self.D,
                                    g.center, g.yaw, self.T_base_opt)
         if T is None or err > self.max_reproj:
+            self._diagnostic(msg, 'pnp_reprojection', match)
             self._warn_throttled(f'PnP 기각: 재투영오차 {err:.2f} px > {self.max_reproj}')
             return
         p = T[:3, 3]
-        if self.max_gap > 0 and self.odom_p is not None:
-            gap = float(np.linalg.norm(p - self.odom_p))
+        if self.max_gap > 0:
+            gap = float(np.linalg.norm(p - prior[:3, 3]))
             if gap > self.max_gap:
-                self._warn_throttled(f'PnP 기각: 오도메트리와 {gap:.1f} m 차이 — '
+                self._diagnostic(msg, 'pnp_innovation', match)
+                self._warn_throttled(f'PnP 기각: VIO prior와 {gap:.1f} m 차이 — '
                                      f'게이트 {g.id} 이 아닌 다른 게이트를 봤을 가능성')
                 return
 
+        self._diagnostic(msg, 'accepted', match, int(g.id))
         self.n_ok += 1
         q = quat_from_R(T[:3, :3])
         ps = PoseStamped()

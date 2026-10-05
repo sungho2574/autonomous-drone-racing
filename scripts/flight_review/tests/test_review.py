@@ -171,3 +171,13 @@ def test_legacy_bag_klt_not_fabricated(tmp_path):
     assert any("KLT 수치가 없습니다" in w for w in data["warnings"])
     data["track_start"] = None
     assert scene_data(data)["plan_time_aligned"] is False
+
+
+def test_native_association_preserves_rejection_and_absent_runner(tmp_path):
+    folder = make_bag(tmp_path, include_association=True)
+    data = load_flight(folder)
+    series = data['series']
+    assert series['pnp_assoc_reason'][44][1] == 5
+    assert series['pnp_assoc_selected_id'][44][1] == 0
+    assert series['pnp_assoc_second_px'][45][1] is None
+    assert series['pnp_assoc_second_px'][46][1] == 25

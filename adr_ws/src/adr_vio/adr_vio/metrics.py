@@ -71,8 +71,22 @@ class VioMetrics(Node):
         )
         sub(Vector3Stamped, "/adr/state/drift", self.drift)
         sub(GateDetectionArray, "/adr/gate_detections", self.detections)
+        sub(DiagnosticArray, "/adr/pnp/association", self.association)
         sub(GatePnP, "/adr/pnp/gate", self.pnp)
         self.create_timer(0.1, self.publish)
+
+    def association(self, msg):
+        # Do not carry the previous frame's runner-up into a one-candidate frame.
+        for key in list(self.store.values):
+            if key.startswith('pnp_assoc_'):
+                self.store.values.pop(key)
+        for status in msg.status:
+            for item in status.values:
+                if item.key.startswith('pnp_assoc_'):
+                    try:
+                        self.put(item.key, float(item.value))
+                    except ValueError:
+                        pass
 
     def tracking(self, msg):
         self.rate("tracker", msg.header)

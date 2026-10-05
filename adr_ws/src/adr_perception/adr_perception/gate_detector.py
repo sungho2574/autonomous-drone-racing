@@ -257,7 +257,7 @@ class GateDetector(Node):
     def _draw(self, bgr, dets, width, height):
         """프레임 bbox + 개구부 4 꼭짓점과 그 사각형.
 
-        0번(가장 큰 = PnP 대상)은 초록, 나머지는 회색. 꼭짓점 순서를 눈으로 확인할 수 있게
+        0번(가장 큰 검출)은 초록, 나머지는 회색. PnP 관측 ID는 별도 prior 매칭으로 정한다. 꼭짓점 순서를 눈으로 확인할 수 있게
         0번 점은 크게 그리고 0~3 번호를 바깥쪽에 붙인다.
         bbox 는 주인공이 아니므로 1 px 어두운 선으로 깔아 둔다 (꼭짓점이 묻히지 않게).
         """
@@ -281,7 +281,7 @@ class GateDetector(Node):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
                 cv2.circle(vis, (int(d.center[0]), int(d.center[1])), 3, color, -1, cv2.LINE_AA)
                 if target:
-                    cv2.putText(vis, f'PnP target  conf={d.conf:.2f}',
+                    cv2.putText(vis, f'Largest detection  conf={d.conf:.2f}',
                                 (8, height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
             else:
                 # 꼭짓점을 못 딴 검출은 중심만 (경계에 잘렸거나 너무 작음)

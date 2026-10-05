@@ -11,5 +11,16 @@ gate_pnp:
     cam_xyz: [0.045, 0.0, 0.022]
     cam_tilt_deg: 20.0              # 위쪽 틸트. 이 값이 틀리면 추정 위치가 통째로 기운다
     max_reproj_px: 3.0              # 재투영오차 상한 [px]
-    max_odom_gap: 5.0               # 오도메트리와 이만큼 넘게 벌어지면 다른 게이트를 본 것으로 보고 기각 [m].
+    max_odom_gap: 5.0               # 이미지 시각 VIO prior와 이만큼 넘게 벌어지면 다른 게이트를 본 것으로 보고 기각 [m].
                                     # PnP 자체 오차(수십 cm)보다 훨씬 크게 둬서 성능 측정을 왜곡하지 않는다. 0 이면 끔
+
+    # Matching uses corrected VIO position + VIO attitude, never simulator truth.
+    prior_topic: /adr/state/corrected
+    prior_max_gap_s: 0.2
+    prior_wait_s: 0.25
+    association_size_fraction: 0.15
+    association_min_px: 10.0
+    association_max_px: 45.0
+    association_max_corner_factor: 1.5
+    association_ratio: 0.7
+    association_margin_px: 5.0

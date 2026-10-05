@@ -44,6 +44,7 @@ def bag_rows(folder):
     wanted = set(POSE_TOPICS) | {
         "/adr/vio/metrics",
         "/ov_msckf/tracking_metrics",
+        "/adr/pnp/association",
         "/adr/controller_state",
         "/adr/trajectory",
     }
@@ -84,6 +85,7 @@ def load_flight(folder):
         store.register(defs)
     metrics = []
     tracker_metrics = []
+    association_metrics = []
     poses = {k: [] for k in ("actual", "raw", "corrected")}
     states = []
     poly = None
@@ -102,7 +104,7 @@ def load_flight(folder):
             row = [stamp(msg.header), p.x, p.y, p.z, q.w, q.x, q.y, q.z]
             if all(math.isfinite(float(x)) for x in row):
                 poses[POSE_TOPICS[topic]].append(row)
-        elif topic in ("/adr/vio/metrics", "/ov_msckf/tracking_metrics"):
+        elif topic in ("/adr/vio/metrics", "/ov_msckf/tracking_metrics", "/adr/pnp/association"):
             values = {}
             for status in msg.status:
                 for kv in status.values:
@@ -112,7 +114,7 @@ def load_flight(folder):
                             values[kv.key] = v
                     except ValueError:
                         pass
-            destination = metrics if topic == "/adr/vio/metrics" else tracker_metrics
+            destination = {"/adr/vio/metrics": metrics, "/ov_msckf/tracking_metrics": tracker_metrics, "/adr/pnp/association": association_metrics}[topic]
             destination.append((stamp(msg.header), values))
         elif topic == "/adr/controller_state":
             states.append((t, msg.data))
@@ -121,6 +123,7 @@ def load_flight(folder):
     poses = {k: clean_rows(v) for k, v in poses.items()}
     metrics = sorted({t: v for t, v in metrics}.items())
     source_times = [r[0] for rows in poses.values() for r in rows]
+    source_times += [t for t, _ in association_metrics]
     source_times += [t for t, _ in metrics] + [t for t, _ in tracker_metrics]
     if not source_times:
         raise ValueError(
@@ -191,6 +194,9 @@ def load_flight(folder):
         for key, value in values.items():
             tracker_series.setdefault(key, []).append([t - origin, value])
     series.update({key: clean_rows(rows) for key, rows in tracker_series.items()})
+    # Native camera-stamped decisions preserve every rejected frame and absent score.
+    for key in {k for _, values in association_metrics for k in values}:
+        series[key] = clean_rows([[t-origin, values.get(key)] for t, values in association_metrics])
     if not series.get("klt_features"):
         warnings.append(
             "KLT 수치가 없습니다. 이전 기록에는 소급 추가할 수 없습니다. 새 비행은 OpenVINS tracker-metrics 패치 적용/재빌드 및 use_klt 설정을 확인하세요."

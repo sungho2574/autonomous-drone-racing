@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO / "adr_ws/src/adr_bringup"))
 from adr_bringup.flight_session import new_session, atomic_json
 
 
-def make_bag(root, gates=6, status="completed", include_tracker=True):
+def make_bag(root, gates=6, status="completed", include_tracker=True, include_association=False):
     course = {
         "gate": {"inner_size": 1.5, "outer_size": 2.1},
         "gates": [
@@ -118,6 +118,16 @@ def make_bag(root, gates=6, status="completed", include_tracker=True):
                 ),
             )
             write(topic, odom, 100 + t)
+        if include_association:
+            values = {"pnp_assoc_selected_id": 0 if i == 44 else 6,
+                      "pnp_assoc_reason": 5 if i == 44 else 0,
+                      "pnp_assoc_accepted": int(i != 44), "pnp_assoc_best_px": 6.0}
+            if i != 45:
+                values["pnp_assoc_second_px"] = 7.0 if i == 44 else 25.0
+            diagnostic = msg("diagnostic_msgs/msg/DiagnosticStatus", 1 if i == 44 else 0,
+                             "gate_association", "ambiguous" if i == 44 else "accepted", "synthetic",
+                             [msg("diagnostic_msgs/msg/KeyValue", k, str(v)) for k,v in values.items()])
+            write("/adr/pnp/association", msg("diagnostic_msgs/msg/DiagnosticArray", header(100+t), [diagnostic]), 100+t)
         if include_tracker:
             # One-frame loss between 10 Hz aggregate ticks must survive in the viewer.
             count = 0 if i == 44 else 250 + i % 30

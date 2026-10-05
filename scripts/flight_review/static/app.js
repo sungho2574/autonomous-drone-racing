@@ -207,6 +207,16 @@ $("copy").onclick = async () => {
   }
 };
 const labels = {
+  pnp_assoc_best_px: "최선 코너 RMSE",
+  pnp_assoc_second_px: "차선 코너 RMSE",
+  pnp_assoc_max_corner_px: "최대 코너 오차",
+  pnp_assoc_limit_px: "RMSE 허용값",
+  pnp_assoc_margin_px: "차선 − 최선",
+  pnp_assoc_selected_id: "채택 ID (0=없음)",
+  pnp_assoc_best_id: "최선 후보 ID",
+  pnp_assoc_second_id: "차선 후보 ID",
+  pnp_assoc_reason: "판정 코드",
+  pnp_assoc_accepted: "PnP 채택 여부",
   klt_features: "KLT active tracks",
   klt_observations: "KLT camera observations",
   tracker_active_features: "Active tracker IDs",
@@ -339,6 +349,12 @@ function renderCharts(all) {
       "검출 수와 corner 유효 검출 수",
       ["gate_detections", "gate_valid_quads"],
     ],
+    ["게이트 ID 매칭 오차", "px", "보정 VIO로 투영한 코너 대비 오차. 차선과 비슷하면 기각합니다.",
+      ["pnp_assoc_best_px", "pnp_assoc_second_px", "pnp_assoc_max_corner_px", "pnp_assoc_limit_px", "pnp_assoc_margin_px"]],
+    ["게이트 ID 매칭 결과", "ID", "주행 목표와 관측 ID는 별개입니다. 채택 ID 0은 보정하지 않은 프레임입니다.",
+      ["pnp_assoc_selected_id", "pnp_assoc_best_id", "pnp_assoc_second_id"]],
+    ["게이트 매칭 판정", "code", "0 채택 · 1 prior 없음 · 2 코너 없음 · 3 가시 게이트 없음 · 4 절대 오차 · 5 후보 모호 · 6 검출 중복 · 7 재투영 오차 · 8 위치 innovation · 9 카메라 정보 없음",
+      ["pnp_assoc_reason", "pnp_assoc_accepted"]],
     ["PnP 품질", "score", "게이트 PnP가 발행하는 품질 지표", ["pnp_quality"]],
     [
       "PnP 재투영 오차",
