@@ -5,7 +5,7 @@
 
 꼭짓점은 구멍 컨투어를 convexHull → approxPolyDP 로 4점이 될 때까지 epsilon 을 키우며 찾는다.
 이미지 기준 **시계방향 TL→TR→BR→BL** 로 정렬해 내보내므로 gate_pnp 가 그대로 solvePnP 에 쓴다.
-이미지 경계에 닿은 개구부(게이트를 통과하는 중)는 잘린 꼭짓점이라 has_corners=False 로 버린다.
+이미지 경계에 닿거나 평행사변형 허용 오차를 벗어난 개구부는 has_corners=False 로 PnP에서 제외한다.
 
 디버그 출력 둘 다 **구독자가 있을 때만** 만든다 (평소 비용 0):
     /adr/perception/debug_image  꼭짓점·bbox 오버레이
@@ -75,6 +75,34 @@ class Detection:
     corners: np.ndarray      # (4,2) float32, TL→TR→BR→BL. 신뢰 못 하면 빈 배열
 
 
+def is_parallelogram(quad: np.ndarray, max_angle_deg: float = 8.0,
+                     max_length_error: float = 0.20) -> bool:
+    """Ordered image quad: both opposite edge pairs must agree in direction and length.
+
+    This is a conservative PnP quality filter, not a projective invariant: real gates
+    with strong perspective may also be rejected. Length error uses the longer edge
+    as denominator, so the tolerance is independent of pixel scale.
+    """
+    q = np.asarray(quad, dtype=np.float64)
+    if q.shape != (4, 2) or not np.isfinite(q).all():
+        return False
+    if not cv2.isContourConvex(q.astype(np.float32)):
+        return False
+    edges = np.roll(q, -1, axis=0) - q
+    lengths = np.linalg.norm(edges, axis=1)
+    if (lengths < 1e-6).any():
+        return False
+    for i in (0, 1):
+        j = i + 2
+        # Opposite edges run in opposite directions around a convex polygon.
+        cosine = -np.dot(edges[i], edges[j]) / (lengths[i] * lengths[j])
+        angle = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+        error = abs(lengths[i] - lengths[j]) / max(lengths[i], lengths[j])
+        if angle > max_angle_deg or error > max_length_error:
+            return False
+    return True
+
+
 def quad_from_contour(contour: np.ndarray) -> np.ndarray:
     """컨투어 → 사각형 꼭짓점 (4,2). 못 찾으면 빈 배열."""
     hull = cv2.convexHull(contour)
@@ -104,6 +132,8 @@ class GateDetector(Node):
         self.declare_parameter('max_gates', 4)
         self.declare_parameter('border_margin', 3)              # 꼭짓점이 이 안쪽으로 들어오면 잘린 것으로 본다 [px]
         self.declare_parameter('min_corner_area', 400.0)        # PnP 에 쓸 개구부 최소 면적 [px^2]
+        self.declare_parameter('max_parallel_angle_deg', 8.0)   # 마주 보는 변의 각도 차이 상한
+        self.declare_parameter('max_opposite_length_error', 0.20)  # |a-b|/max(a,b) 상한
         self.declare_parameter('debug_topic', '/adr/perception/debug_image')
         self.declare_parameter('mask_topic', '/adr/perception/mask_image')
 
@@ -116,6 +146,13 @@ class GateDetector(Node):
         self.max_gates = int(self.get_parameter('max_gates').value)
         self.border = int(self.get_parameter('border_margin').value)
         self.min_corner_area = float(self.get_parameter('min_corner_area').value)
+
+        self.max_parallel_angle_deg = float(self.get_parameter('max_parallel_angle_deg').value)
+        self.max_opposite_length_error = float(self.get_parameter('max_opposite_length_error').value)
+        if not 0 <= self.max_parallel_angle_deg < 90:
+            raise ValueError('max_parallel_angle_deg must be in [0, 90)')
+        if not 0 <= self.max_opposite_length_error < 1:
+            raise ValueError('max_opposite_length_error must be in [0, 1)')
 
         self.bridge = CvBridge()
         self.det_pub = self.create_publisher(GateDetectionArray, '/adr/gate_detections', 10)
@@ -169,7 +206,10 @@ class GateDetector(Node):
                     if len(q) == 4 and (q[:, 0] > self.border).all() and (q[:, 1] > self.border).all() \
                             and (q[:, 0] < w_img - 1 - self.border).all() \
                             and (q[:, 1] < h_img - 1 - self.border).all():
-                        corners = q
+                        # Keep 2D detection, but do not feed malformed quads to PnP.
+                        if is_parallelogram(q, self.max_parallel_angle_deg,
+                                            self.max_opposite_length_error):
+                            corners = q
             else:
                 cu, cv_ = x + w / 2, y + h / 2
                 has_hole = False

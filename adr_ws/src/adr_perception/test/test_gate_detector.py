@@ -4,6 +4,7 @@ import types
 
 import cv2
 import numpy as np
+import pytest
 
 
 def _stub_ros():
@@ -25,7 +26,7 @@ def _stub_ros():
 
 
 _stub_ros()
-from adr_perception.gate_detector import GateDetector  # noqa: E402
+from adr_perception.gate_detector import GateDetector, is_parallelogram  # noqa: E402
 
 BG = (140, 150, 140)
 ORANGE = (0, 115, 255)   # BGR of gz (1.0, 0.45, 0.0)
@@ -40,6 +41,8 @@ def _detector():
     d.max_gates = 4
     d.border = 3
     d.min_corner_area = 400.0
+    d.max_parallel_angle_deg = 8.0
+    d.max_opposite_length_error = 0.20
     return d
 
 
@@ -87,16 +90,16 @@ def test_corners_axis_aligned():
     assert np.abs(d.corners - expect).max() <= 1.5, f'{d.corners}'
 
 
-def test_corners_perspective_quad():
-    """원근으로 기울어진 사다리꼴 개구부도 꼭짓점을 잡고 순서가 유지돼야 한다."""
+def test_corners_reject_perspective_trapezoid():
+    """사다리꼴은 2D 검출을 유지하지만 PnP용 꼭짓점은 내보내지 않는다."""
     img = np.full((480, 640, 3), BG, np.uint8)
     outer = np.array([[180, 120], [460, 150], [440, 400], [200, 360]], np.int32)
     inner = np.array([[220, 160], [420, 185], [405, 360], [235, 325]], np.int32)
     cv2.fillPoly(img, [outer], ORANGE)
     cv2.fillPoly(img, [inner], BG)
     d = _detector().detect(img)[0][0]
-    assert len(d.corners) == 4
-    assert np.abs(d.corners - inner.astype(float)).max() <= 3.0, f'{d.corners}'
+    assert d.has_hole
+    assert len(d.corners) == 0
 
 
 def test_corners_rejected_at_image_border():
@@ -113,3 +116,48 @@ def test_small_hole_no_corners():
     _gate(img, 320, 240, 40, 15)           # 개구부 15x15 = 225 px^2 < min_corner_area
     dets, _ = _detector().detect(img)
     assert len(dets) == 1 and dets[0].has_hole and len(dets[0].corners) == 0
+
+
+@pytest.mark.parametrize('angle', [0, 25, 90, 145])
+@pytest.mark.parametrize('scale', [0.5, 1.0, 3.0])
+def test_parallelogram_rotation_and_scale(angle, scale):
+    q = np.array([[0, 0], [120, 0], [155, 90], [35, 90]], float)
+    a = np.radians(angle)
+    R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+    assert is_parallelogram(scale * q @ R.T + [200, 150])
+
+
+@pytest.mark.parametrize('q', [
+    [[0, 0], [100, 0], [140, 100], [-40, 100]],  # only horizontal pair parallel
+    [[0, 0], [100, -40], [100, 140], [0, 100]],  # only vertical pair parallel
+    [[0, 0], [100, 0], [130, 1000], [-30, 1000]],  # angles pass, lengths fail
+    [[0, 0], [0, 0], [100, 100], [0, 100]],
+    [[0, 0], [100, 100], [100, 0], [0, 100]],
+    [[0, 0], [100, 0], [20, 20], [0, 100]],
+    [[0, 0], [100, 0], [100, float('nan')], [0, 100]],
+])
+def test_reject_invalid_quads(q):
+    assert not is_parallelogram(q)
+
+
+def test_parallel_tolerance_is_configurable():
+    q = np.array([[0, 0], [100, 0], [110, 100], [-10, 100]], float)
+    assert not is_parallelogram(q)
+    assert is_parallelogram(q, max_angle_deg=12, max_length_error=0.20)
+    assert not is_parallelogram(q, max_angle_deg=12, max_length_error=0.10)
+
+
+def test_noisy_parallelogram_passes():
+    q = np.array([[0, 1], [121, 0], [153, 91], [35, 89]], float)
+    assert is_parallelogram(q)
+
+
+def test_sheared_gate_corners_pass_end_to_end():
+    img = np.full((480, 640, 3), BG, np.uint8)
+    outer = np.array([[160, 100], [400, 100], [460, 370], [220, 370]], np.int32)
+    inner = np.array([[205, 145], [365, 145], [405, 325], [245, 325]], np.int32)
+    cv2.fillPoly(img, [outer], ORANGE)
+    cv2.fillPoly(img, [inner], BG)
+    d = _detector().detect(img)[0][0]
+    assert len(d.corners) == 4
+    assert np.abs(d.corners - inner).max() <= 3

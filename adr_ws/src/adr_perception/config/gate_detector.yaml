@@ -7,5 +7,8 @@ gate_detector:
     min_hole_area: 30.0           # 개구부 하한
     morph_kernel: 3
     max_gates: 4
+    # 보수적인 영상 평행사변형 필터. 강한 원근의 정상 게이트도 제외될 수 있음.
+    max_parallel_angle_deg: 8.0        # 양쪽 대변 쌍 각각의 방향 차이 [deg]
+    max_opposite_length_error: 0.20    # 양쪽 대변 쌍 각각 |a-b|/max(a,b)
     debug_topic: /adr/perception/debug_image
     mask_topic: /adr/perception/mask_image   # HSV 세그멘테이션 마스크 (mono8). 구독자 있을 때만 발행
