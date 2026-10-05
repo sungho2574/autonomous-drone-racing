@@ -12,10 +12,7 @@ drift_corrector:
     # --- 논문 §2.3(a) 거리 필터. 논문 1~13 m 는 실외 대형 트랙 기준 ---
     tau_d_min: 1.0
     tau_d_max: 8.0
-    max_dt: 0.15                    # 보간할 두 VIO 샘플 사이 최대 간격 [s]
-    sync_history_s: 10.0           # Hz와 무관한 VIO 이력 길이
-    sync_wait_s: 5.0               # 늦은 VIO를 기다리는 wall-clock 시간
-    path_rate_hz: 5.0              # 전체 Path 직렬화가 입력 처리를 막지 않도록 제한
+    max_dt: 0.15                    # VIO↔PnP stamp 허용 차 [s]
     hold_timeout: 2.5               # 측정이 이 시간 넘게 끊기면 등속 외삽 중단(발산 방지)
     v_max: 0.5                      # drift 속도 상한 [m/s]
     path_max_points: 6000

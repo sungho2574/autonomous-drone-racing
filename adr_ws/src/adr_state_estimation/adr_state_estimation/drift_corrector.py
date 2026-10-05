@@ -9,15 +9,13 @@ rviz 에서 연한 VioPath(쌩 VIO)와 진한 CorrectedPath(보정) 를 겹쳐 �
 
 시간 정렬
   PnP 측정값의 잔차는 y = p_pnp − p_vio(같은 시각) 이므로, VIO 포즈를 stamp 로 되짚어야 한다.
-  VIO 이력은 시간 길이로 보관하고 PnP는 VIO 도착까지 대기한 뒤 선형 보간한다.
-  KF는 측정 시각순으로 갱신한다. 출력 시에만 복사본을 현재 VIO 시각으로 예측한다.
+  최근 VIO 포즈를 버퍼에 두고 가장 가까운 stamp 를 찾아 쓴다 (max_dt 초과면 버린다).
+  KF 상태를 측정 시각으로 되감지는 않는다 — 시각화 목적이고 어긋나야 수십 ms 라 무시한다.
 
 논문 §2.3 의 검출 필터 중 여기서는 **거리 필터만** 쓴다. aspect-ratio·occlusion 필터는
 YOLO 가 여러 게이트를 동시에 내는 상황을 위한 것인데, 이 파이프라인의 gate_pnp 는
 가장 큰 검출 1개만 골라 이미 연관(association)까지 끝낸 뒤 넘겨주기 때문이다.
 """
-import copy
-import time
 import numpy as np
 import rclpy
 from adr_msgs.msg import GatePnP
@@ -27,7 +25,6 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 
 from adr_state_estimation.drift_kf import DriftKF
-from adr_state_estimation.time_sync import PoseSync
 
 
 def stamp_s(h) -> float:
@@ -51,9 +48,6 @@ class DriftCorrector(Node):
         # 논문 §2.3(a) 거리 필터. 논문 값 1~13 m 는 실외 대형 트랙 기준이라 이 코스(반경 4 m)에 맞게 축소.
         self.declare_parameter('tau_d_min', 1.0)
         self.declare_parameter('tau_d_max', 8.0)
-        self.declare_parameter('sync_history_s', 10.0)
-        self.declare_parameter('sync_wait_s', 5.0)
-        self.declare_parameter('path_rate_hz', 5.0)
         self.declare_parameter('max_dt', 0.15)          # VIO↔PnP stamp 허용 차 [s]
         # 측정이 이 시간 넘게 끊기면 등속 외삽을 멈추고 마지막 drift 를 유지한다.
         # 이 코스는 게이트 사이 ~2 초라 그보다 넉넉히 잡는다. (논문에 없는 처리 — drift_kf.predict 주석 참고)
@@ -73,14 +67,7 @@ class DriftCorrector(Node):
         self.hold_timeout = float(self.get_parameter('hold_timeout').value)
         self.max_points = int(self.get_parameter('path_max_points').value)
 
-        self.sync = PoseSync(max_gap=self.max_dt,
-                             history=float(self.get_parameter('sync_history_s').value),
-                             wait=float(self.get_parameter('sync_wait_s').value))
-        self.path_rate = float(self.get_parameter('path_rate_hz').value)
-        if self.path_rate <= 0:
-            raise ValueError('path_rate_hz must be positive')
-        self._path_time = float('-inf')
-        self._n_bad_input = 0
+        self._buf = []              # [(t, p_vio)] 최근 VIO 포즈
         self._t_prev = None
         self._ref = None
         self._n_rej_dist = 0
@@ -98,7 +85,6 @@ class DriftCorrector(Node):
         self.create_subscription(Odometry, self.get_parameter('vio_topic').value, self._on_vio, 20)
         self.create_subscription(GatePnP, self.get_parameter('pnp_topic').value, self._on_pnp, 10)
         self.create_subscription(Odometry, self.get_parameter('reference_topic').value, self._on_ref, 10)
-        self.create_timer(0.02, self._drain_pnp)
         self.create_timer(5.0, self._report)
         self.get_logger().info(
             f'drift_corrector: VIO {self.get_parameter("vio_topic").value} + '
@@ -116,27 +102,20 @@ class DriftCorrector(Node):
         p = m.pose.pose.position
         p_vio = np.array([p.x, p.y, p.z])
 
-        if m.header.frame_id != self.frame_id or not np.isfinite([t, *p_vio]).all():
-            self._n_bad_input += 1
-            return
-        if self._t_prev is not None and t < self._t_prev:
-            # Out-of-order samples can still fill a pending interpolation bracket.
-            # Do not publish an older output or rewind the measurement-time KF.
-            self.sync.add_pose(t, p_vio)
-            self._drain_pnp()
-            self._n_bad_input += 1
-            return
-        self._t_prev = t
-        self.sync.add_pose(t, p_vio)
-        self._drain_pnp()
-        hold = self._t_last_update is None or t-self._t_last_update > self.hold_timeout
+        # 측정이 끊긴 지 오래면 등속 외삽을 멈춘다 (안 그러면 v_d 적분으로 발산)
+        hold = (self._t_last_update is None or (t - self._t_last_update) > self.hold_timeout)
         if hold != self._holding:
-            self.get_logger().info('PnP 갱신 지연 → drift 유지 모드' if hold else 'PnP 갱신 재개')
+            self.get_logger().info('PnP 끊김 → drift 유지 모드' if hold else 'PnP 재개 → 등속 외삽 재개')
             self._holding = hold
-        output_kf = copy.deepcopy(self.kf)
-        if self._t_last_update is not None:
-            output_kf.predict(min(max(0.0, t-self._t_last_update), self.hold_timeout))
-        p_cor = output_kf.correct(p_vio)
+        if self._t_prev is not None:
+            self.kf.predict(t - self._t_prev, hold=hold)
+        self._t_prev = t
+
+        self._buf.append((t, p_vio))
+        if len(self._buf) > 300:                 # 30 Hz 기준 10 초치
+            del self._buf[:len(self._buf) - 300]
+
+        p_cor = self.kf.correct(p_vio)
 
         out = Odometry()
         out.header.stamp = m.header.stamp
@@ -147,20 +126,18 @@ class DriftCorrector(Node):
         out.twist = m.twist
         self.odom_pub.publish(out)
 
-        if t-self._path_time >= 1.0/self.path_rate:
-            self._path_time = t
-            ps = PoseStamped()
-            ps.header = out.header
-            ps.pose = out.pose.pose
-            self.path.poses.append(ps)
-            if len(self.path.poses) > self.max_points:
-                del self.path.poses[:len(self.path.poses) - self.max_points]
-            self.path.header.stamp = out.header.stamp
-            self.path_pub.publish(self.path)
+        ps = PoseStamped()
+        ps.header = out.header
+        ps.pose = out.pose.pose
+        self.path.poses.append(ps)
+        if len(self.path.poses) > self.max_points:
+            del self.path.poses[:len(self.path.poses) - self.max_points]
+        self.path.header.stamp = out.header.stamp
+        self.path_pub.publish(self.path)
 
         d = Vector3Stamped()
         d.header = out.header
-        d.vector.x, d.vector.y, d.vector.z = map(float, output_kf.p_d)
+        d.vector.x, d.vector.y, d.vector.z = map(float, self.kf.p_d)
         self.drift_pub.publish(d)
 
         if self._ref is not None:
@@ -176,26 +153,21 @@ class DriftCorrector(Node):
             self._n_rej_dist += 1
             return
         t = stamp_s(m.header)
-        z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
-        if m.header.frame_id != self.frame_id or not np.isfinite([t, *z, m.quality]).all():
-            self._n_bad_input += 1
+        p_vio = self._vio_at(t)
+        if p_vio is None:
             return
-        self.sync.add_pnp(t, (z, float(m.quality)), time.monotonic())
-        self._drain_pnp()
+        z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
+        self.kf.update(z, p_vio, quality=m.quality)
+        self._t_last_update = t
 
-    def _drain_pnp(self):
-        for t, p_vio, (z, quality) in self.sync.drain(time.monotonic()):
-            if self._t_last_update is not None:
-                dt = t-self._t_last_update
-                self.kf.predict(min(dt, self.hold_timeout))
-                self.kf.predict(max(0.0, dt-self.hold_timeout), hold=True)
-            self.kf.update(z, p_vio, quality=quality)
-            self._t_last_update = t
+    def _vio_at(self, t: float):
+        """stamp t 에 가장 가까운 VIO 위치. 허용 오차를 넘으면 None."""
+        if not self._buf:
+            return None
+        i = min(range(len(self._buf)), key=lambda k: abs(self._buf[k][0] - t))
+        return self._buf[i][1] if abs(self._buf[i][0] - t) <= self.max_dt else None
 
     def _report(self):
-        self.get_logger().info(
-            f'PnP sync: {dict(self.sync.counts)}, pending={len(self.sync.pending)}, '
-            f'distance_rejected={self._n_rej_dist}, invalid_or_old_vio={self._n_bad_input}')
         if self._n_err == 0:
             return
         v, c = self._sum_vio / self._n_err, self._sum_cor / self._n_err
