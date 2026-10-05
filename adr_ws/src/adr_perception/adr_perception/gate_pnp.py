@@ -69,8 +69,8 @@ class GatePnP(Node):
         self.declare_parameter('prior_topic', '/adr/odom')
         self.declare_parameter('prior_max_gap_s', 0.2)
         self.declare_parameter('prior_wait_s', 0.25)
-        self.declare_parameter('detector_debug_topic', '/adr/perception/debug_image')
-        self.declare_parameter('projection_debug_topic', '/adr/pnp/debug_image')
+        self.declare_parameter('detector_debug_topic', '/adr/perception/detections_image')
+        self.declare_parameter('projection_debug_topic', '/adr/perception/debug_image')
         for name, value in vars(MatchConfig()).items():
             self.declare_parameter('association_' + name, value)
         # quality 산출용 거리 구간 (논문 §2.3 의 거리 필터 τ_d_min/τ_d_max 와 같은 의미).

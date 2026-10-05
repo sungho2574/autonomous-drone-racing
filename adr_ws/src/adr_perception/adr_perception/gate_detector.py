@@ -8,7 +8,7 @@
 이미지 경계에 닿거나 평행사변형 허용 오차를 벗어난 개구부는 has_corners=False 로 PnP에서 제외한다.
 
 디버그 출력 둘 다 **구독자가 있을 때만** 만든다 (평소 비용 0):
-    /adr/perception/debug_image  꼭짓점·bbox 오버레이
+    /adr/perception/detections_image  꼭짓점·bbox 오버레이
     /adr/perception/mask_image   HSV 세그멘테이션 마스크 (mono8, 흰색 = 게이트)
     ros2 run rqt_image_view rqt_image_view /adr/perception/mask_image
 
@@ -134,7 +134,7 @@ class GateDetector(Node):
         self.declare_parameter('min_corner_area', 400.0)        # PnP 에 쓸 개구부 최소 면적 [px^2]
         self.declare_parameter('max_parallel_angle_deg', 8.0)   # 마주 보는 변의 각도 차이 상한
         self.declare_parameter('max_opposite_length_error', 0.20)  # |a-b|/max(a,b) 상한
-        self.declare_parameter('debug_topic', '/adr/perception/debug_image')
+        self.declare_parameter('debug_topic', '/adr/perception/detections_image')
         self.declare_parameter('mask_topic', '/adr/perception/mask_image')
 
         self.lower = np.array(self.get_parameter('hsv_lower').value, dtype=np.uint8)

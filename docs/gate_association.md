@@ -63,7 +63,7 @@ G6 검출이 G6로 연결되고 원래 기체 위치로 복원되는지 검증�
 
 ## GT 예상 게이트 오버레이
 
-`ros2 run rqt_image_view rqt_image_view /adr/pnp/debug_image`로 검출 영상과 GT 예상
+`ros2 run rqt_image_view rqt_image_view /adr/perception/debug_image`로 검출 영상과 GT 예상
 게이트를 함께 본다. 청록색 사각형·십자·G번호는 고정 맵 게이트를 이미지 시각의
 `/adr/odom` 위치·자세로 투영한 결과이고, 빨간 꼭짓점은 영상 검출이다.
 전체 코너가 화면에 들어오는 정면 게이트 후보를 표시한다.
@@ -71,3 +71,7 @@ GT pose는 이미지 시각으로 보간하며, 0.2초보다 큰 pose 공백이�
 최대 0.25초 기다려도 pose가 없으면 `no GT pose at image time`을 표시하고 이전 투영은 재사용하지 않는다.
 VIO 초기화 전이나 PnP 기각 시에도 GT가 있으면 오버레이를 볼 수 있다.
 실제 PnP 게이트 매칭과 위치 차이 검사도 기본적으로 GT `/adr/odom`을 사용한다.
+
+기존 `/adr/perception/debug_image`가 GT 오버레이를 포함한 최종 영상이다.
+검출만 있는 원본 디버그 영상은 `/adr/perception/detections_image`다.
+최종 영상에는 gate_pnp 노드가 필요하며, `pnp:=false`일 때는 검출 전용 토픽을 사용한다.
