@@ -36,7 +36,10 @@ from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import CameraInfo
+from sensor_msgs.msg import CameraInfo, Image
+from cv_bridge import CvBridge
+from adr_perception.gate_detector import bgr8_to_imgmsg
+from adr_perception.projection_overlay import draw_projection
 from std_msgs.msg import Float32, Int32
 from visualization_msgs.msg import Marker
 
@@ -66,6 +69,8 @@ class GatePnP(Node):
         self.declare_parameter('prior_topic', '/adr/state/corrected')
         self.declare_parameter('prior_max_gap_s', 0.2)
         self.declare_parameter('prior_wait_s', 0.25)
+        self.declare_parameter('detector_debug_topic', '/adr/perception/debug_image')
+        self.declare_parameter('projection_debug_topic', '/adr/pnp/debug_image')
         for name, value in vars(MatchConfig()).items():
             self.declare_parameter('association_' + name, value)
         # quality 산출용 거리 구간 (논문 §2.3 의 거리 필터 τ_d_min/τ_d_max 와 같은 의미).
@@ -109,6 +114,13 @@ class GatePnP(Node):
         self.pose_pub = self.create_publisher(PoseStamped, '/adr/pnp/pose', 10)
         self.gate_pub = self.create_publisher(Int32, '/adr/pnp/target_gate', 10)
         self.err_pub = self.create_publisher(Float32, '/adr/pnp/error', 10)
+        self.gt_poses = PoseBuffer(0.2)
+        self.debug_images = deque(maxlen=30)
+        self.create_timer(0.02, self._drain_debug)
+        self.overlay_bridge = CvBridge()
+        self.debug_pub = self.create_publisher(Image, self.get_parameter('projection_debug_topic').value, SENSOR_QOS)
+        self.create_subscription(Image, self.get_parameter('detector_debug_topic').value,
+                                 self._on_debug_image, SENSOR_QOS)
         self.create_subscription(CameraInfo, self.get_parameter('camera_info_topic').value,
                                  self._on_info, SENSOR_QOS)
         self.create_subscription(Odometry, self.get_parameter('odom_topic').value, self._on_odom, 10)
@@ -141,6 +153,10 @@ class GatePnP(Node):
     def _on_odom(self, m: Odometry):
         p = np.array([m.pose.pose.position.x, m.pose.pose.position.y, m.pose.pose.position.z])
         self.odom_p = p
+        if m.header.frame_id == self.frame_id:
+            q = m.pose.pose.orientation
+            self.gt_poses.add(self._stamp(m), p, [q.x, q.y, q.z, q.w])
+            self._drain_debug()
         self._advance_gate(p)
 
     def _advance_gate(self, p):
@@ -167,6 +183,32 @@ class GatePnP(Node):
         p, q = msg.pose.pose.position, msg.pose.pose.orientation
         self.priors.add(self._stamp(msg), [p.x, p.y, p.z], [q.x, q.y, q.z, q.w])
         self._drain()
+
+    def _on_debug_image(self, msg):
+        if self.debug_pub.get_subscription_count():
+            self.debug_images.append((msg, time.monotonic()))
+            self._drain_debug()
+
+    def _drain_debug(self):
+        while self.debug_images:
+            image, received = self.debug_images[0]
+            pose = self.gt_poses.sample(self._stamp(image))
+            if pose is None and time.monotonic() - received < 0.25:
+                return
+            self.debug_images.popleft()
+            if not self.debug_pub.get_subscription_count():
+                continue
+            projected = []
+            reason = 'no GT pose at image time' if pose is None else 'no camera info'
+            if pose is not None and self.K is not None:
+                projected = [(int(g.id), uv) for g, uv in project_gates(
+                    self.course.gates, self.course.inner_size, pose, self.T_base_opt,
+                    self.K, self.D, self.width, self.height)]
+                reason = f'{len(projected)} visible gates'
+            bgr = self.overlay_bridge.imgmsg_to_cv2(image, desired_encoding='bgr8')
+            vis = draw_projection(bgr, projected, reason,
+                                  'GT ' + self.get_parameter('odom_topic').value)
+            self.debug_pub.publish(bgr8_to_imgmsg(vis, image.header))
 
     def _diagnostic(self, msg, reason, match=None, selected=0):
         codes = {'accepted': 0, 'no_prior': 1, 'no_corners': 2, 'no_visible_gate': 3,

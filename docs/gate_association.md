@@ -60,3 +60,14 @@ ROS 환경에서 `colcon build --packages-select adr_perception adr_vio adr_brin
 PnP 위치 점프 및 보정 VIO 오차를 함께 비교한다. 실제 비행 개선 여부는 이 재비행으로
 검증해야 한다. 합성 투영 테스트는 실제 big_track 맵에서 G4와 G6가 동시에 보일 때
 G6 검출이 G6로 연결되고 원래 기체 위치로 복원되는지 검증한다.
+
+## GT 예상 게이트 오버레이
+
+`ros2 run rqt_image_view rqt_image_view /adr/pnp/debug_image`로 검출 영상과 GT 예상
+게이트를 함께 본다. 청록색 사각형·십자·G번호는 고정 맵 게이트를 이미지 시각의
+`/adr/odom` 위치·자세로 투영한 결과이고, 빨간 꼭짓점은 영상 검출이다.
+전체 코너가 화면에 들어오는 정면 게이트 후보를 표시한다.
+GT pose는 이미지 시각으로 보간하며, 0.2초보다 큰 pose 공백이나 외삽은 허용하지 않는다.
+최대 0.25초 기다려도 pose가 없으면 `no GT pose at image time`을 표시하고 이전 투영은 재사용하지 않는다.
+VIO 초기화 전이나 PnP 기각 시에도 GT가 있으면 오버레이를 볼 수 있다.
+이는 시각화 전용이다. 실제 PnP 게이트 매칭 prior는 `/adr/state/corrected`를 유지한다.
