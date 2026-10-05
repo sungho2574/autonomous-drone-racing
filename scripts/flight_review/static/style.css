@@ -390,3 +390,165 @@ pre {
     display: none;
   }
 }
+/* View controls stay reachable while scrolling through a long flight. */
+[hidden] {
+  display: none !important;
+}
+header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--bg);
+}
+#view-options {
+  position: relative;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+#view-options > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 13px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #1a2230;
+  color: var(--text);
+}
+#view-options > summary::-webkit-details-marker {
+  display: none;
+}
+.view-menu {
+  position: absolute;
+  right: 0;
+  top: 45px;
+  min-width: 220px;
+  background: #192231;
+  border: 1px solid #36455c;
+  border-radius: 10px;
+  padding: 17px;
+  box-shadow: 0 15px 40px #0008;
+}
+.view-menu strong {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.view-menu label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 0;
+  cursor: pointer;
+}
+.view-menu input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+#review-layout,
+#analysis-panel {
+  min-width: 0;
+}
+.split-view #review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+#scene-panel {
+  position: sticky;
+  top: 96px;
+  padding: 16px;
+  min-width: 0;
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+}
+#scene-panel .panel-heading {
+  margin-bottom: 4px;
+}
+#scene-panel .series-controls {
+  gap: 5px;
+}
+#scene-panel .series-toggle {
+  padding: 5px 7px;
+}
+#scene-canvas {
+  height: clamp(180px, calc(100vh - 430px), 640px);
+  position: relative;
+  background: #101722;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+#scene-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+.scene-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+#scene-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--accent);
+}
+.scene-toolbar button {
+  font-size: 10px;
+  padding: 5px 7px;
+  margin-left: 4px;
+}
+#pose-status {
+  margin-top: 10px;
+}
+.pose-readout {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.split-view #analysis-panel .panel {
+  padding: 16px;
+}
+.split-view .chart-heading {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+@media (max-width: 640px) {
+  .split-view #review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #scene-panel {
+    position: relative;
+    top: auto;
+    max-height: none;
+  }
+  #scene-canvas {
+    height: 300px;
+  }
+  header {
+    gap: 7px;
+    font-size: 12px;
+  }
+  #view-options {
+    margin-left: auto;
+  }
+}
+
+#scene-canvas canvas:active {
+  cursor: grabbing;
+}
+
+#error-period { background: #182131; color: #e3eaf5; border: 1px solid #39445a; border-radius: 6px; padding: 8px; }
+.error-table-wrap { overflow-x: auto; }
+#error-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+#error-table th, #error-table td { padding: 12px 9px; text-align: right; border-bottom: 1px solid #293347; white-space: nowrap; }
+#error-table th:first-child { text-align: left; }
+#error-table thead { color: #94a9c7; }

@@ -1,0 +1,149 @@
+diff --git a/ov_msckf/src/core/VioManager.h b/ov_msckf/src/core/VioManager.h
+--- a/ov_msckf/src/core/VioManager.h
++++ b/ov_msckf/src/core/VioManager.h
+@@ -118,6 +118,9 @@
+ 
+   /// Returns 3d ARUCO features in the global frame
+   std::vector<Eigen::Vector3d> get_features_ARUCO();
++
++  /// Current tracker IDs (not triangulated points). Thread-safe snapshot per camera.
++  std::unordered_map<size_t, std::vector<size_t>> get_tracker_ids();
+ 
+   /// Returns 3d features used in the last update in global frame
+   std::vector<Eigen::Vector3d> get_good_features_MSCKF() { return good_features_MSCKF; }
+diff --git a/ov_msckf/src/core/VioManager.cpp b/ov_msckf/src/core/VioManager.cpp
+--- a/ov_msckf/src/core/VioManager.cpp
++++ b/ov_msckf/src/core/VioManager.cpp
+@@ -163,6 +163,10 @@
+   }
+ }
+ 
++std::unordered_map<size_t, std::vector<size_t>> VioManager::get_tracker_ids() {
++  return trackFEATS->get_last_ids();
++}
++
+ void VioManager::feed_measurement_imu(const ov_core::ImuData &message) {
+ 
+   // The oldest time we need IMU with is the last clone
+diff --git a/ov_msckf/src/ros/ROS2Visualizer.h b/ov_msckf/src/ros/ROS2Visualizer.h
+--- a/ov_msckf/src/ros/ROS2Visualizer.h
++++ b/ov_msckf/src/ros/ROS2Visualizer.h
+@@ -22,6 +22,8 @@
+ #ifndef OV_MSCKF_ROS2VISUALIZER_H
+ #define OV_MSCKF_ROS2VISUALIZER_H
+ 
++#include <diagnostic_msgs/msg/diagnostic_array.hpp>
++#include <unordered_set>
+ #include <geometry_msgs/msg/pose_stamped.hpp>
+ #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+ #include <geometry_msgs/msg/transform_stamped.hpp>
+@@ -126,6 +128,9 @@
+   /// Publish the active tracking image
+   void publish_images();
+ 
++  /// Count active tracker IDs after each processed image, even before VIO initialization.
++  void publish_tracking_metrics(double timestamp);
++
+   /// Publish current features
+   void publish_features();
+ 
+@@ -143,6 +148,8 @@
+ 
+   /// Simulator (is nullptr if we are not sim'ing)
+   std::shared_ptr<Simulator> _sim;
++
++  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr pub_tracking_metrics;
+ 
+   // Our publishers
+   image_transport::Publisher it_pub_tracks, it_pub_loop_img_depth, it_pub_loop_img_depth_color;
+diff --git a/ov_msckf/src/ros/ROS2Visualizer.cpp b/ov_msckf/src/ros/ROS2Visualizer.cpp
+--- a/ov_msckf/src/ros/ROS2Visualizer.cpp
++++ b/ov_msckf/src/ros/ROS2Visualizer.cpp
+@@ -37,6 +37,8 @@
+ 
+ ROS2Visualizer::ROS2Visualizer(std::shared_ptr<rclcpp::Node> node, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+     : _node(node), _app(app), _sim(sim), thread_update_running(false) {
++
++  pub_tracking_metrics = node->create_publisher<diagnostic_msgs::msg::DiagnosticArray>("tracking_metrics", 10);
+ 
+   // Setup our transform broadcaster
+   mTfBr = std::make_shared<tf2_ros::TransformBroadcaster>(node);
+@@ -218,6 +220,40 @@
+   }
+ }
+ 
++void ROS2Visualizer::publish_tracking_metrics(double timestamp) {
++  if (pub_tracking_metrics->get_subscription_count() == 0)
++    return;
++  const auto ids_by_camera = _app->get_tracker_ids();
++  std::unordered_set<size_t> unique_ids;
++  size_t observations = 0;
++  for (const auto &camera : ids_by_camera) {
++    observations += camera.second.size();
++    unique_ids.insert(camera.second.begin(), camera.second.end());
++  }
++  diagnostic_msgs::msg::DiagnosticArray msg;
++  msg.header.stamp = ROSVisualizerHelper::get_time_from_seconds(timestamp);
++  diagnostic_msgs::msg::DiagnosticStatus status;
++  status.name = "openvins/tracker";
++  status.hardware_id = "openvins";
++  status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
++  status.message = "Current tracker IDs, including newly detected points; stereo IDs counted once";
++  const bool is_klt = _app->get_params().use_klt;
++  auto add = [&status](const std::string &key, size_t value) {
++    diagnostic_msgs::msg::KeyValue item;
++    item.key = key;
++    item.value = std::to_string(value);
++    status.values.push_back(item);
++  };
++  add("tracker_is_klt", is_klt ? 1 : 0);
++  add("tracker_active_features", unique_ids.size());
++  if (is_klt) {
++    add("klt_features", unique_ids.size());
++    add("klt_observations", observations);
++  }
++  msg.status.push_back(status);
++  pub_tracking_metrics->publish(msg);
++}
++
+ void ROS2Visualizer::visualize() {
+ 
+   // Return if we have already visualized
+@@ -476,6 +512,7 @@
+         auto rT0_1 = boost::posix_time::microsec_clock::local_time();
+         double update_dt = 100.0 * (timestamp_imu_inC - camera_queue.at(0).timestamp);
+         _app->feed_measurement_camera(camera_queue.at(0));
++        publish_tracking_metrics(camera_queue.at(0).timestamp);
+         visualize();
+         camera_queue.pop_front();
+         auto rT0_2 = boost::posix_time::microsec_clock::local_time();
+diff --git a/ov_msckf/cmake/ROS2.cmake b/ov_msckf/cmake/ROS2.cmake
+--- a/ov_msckf/cmake/ROS2.cmake
++++ b/ov_msckf/cmake/ROS2.cmake
+@@ -6,6 +6,7 @@
+ find_package(tf2_ros REQUIRED)
+ find_package(tf2_geometry_msgs REQUIRED)
+ find_package(std_msgs REQUIRED)
++find_package(diagnostic_msgs REQUIRED)
+ find_package(geometry_msgs REQUIRED)
+ find_package(sensor_msgs REQUIRED)
+ find_package(nav_msgs REQUIRED)
+@@ -40,6 +41,7 @@
+         tf2_ros
+         tf2_geometry_msgs
+         std_msgs
++        diagnostic_msgs
+         geometry_msgs
+         sensor_msgs
+         nav_msgs
+diff --git a/ov_msckf/package.xml b/ov_msckf/package.xml
+--- a/ov_msckf/package.xml
++++ b/ov_msckf/package.xml
+@@ -39,6 +39,7 @@
+     <!-- ROS2: Dependencies needed to compile this package. -->
+     <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>
+     <depend condition="$ROS_VERSION == 2">rclcpp</depend>
++    <depend condition="$ROS_VERSION == 2">diagnostic_msgs</depend>
+     <depend condition="$ROS_VERSION == 2">tf2_ros</depend>
+     <depend condition="$ROS_VERSION == 2">tf2_geometry_msgs</depend>
+     <depend condition="$ROS_VERSION == 2">std_msgs</depend>

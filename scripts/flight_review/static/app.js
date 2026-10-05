@@ -1,4 +1,5 @@
-"use strict";
+import { FlightScene } from "./scene.js";
+("use strict");
 const $ = (id) => document.getElementById(id),
   palette = [
     "#81c784",
@@ -15,7 +16,14 @@ let runs = [],
   plots = [],
   observers = [],
   request = 0,
-  payload = null;
+  payload = null,
+  viewer = null,
+  hoverTime = null;
+let viewMode = "graphs";
+try {
+  viewMode =
+    localStorage.getItem("adr-review-layout") === "split" ? "split" : "graphs";
+} catch {}
 const el = (tag, text, cls) => {
   const n = document.createElement(tag);
   if (text !== undefined) n.textContent = text;
@@ -70,7 +78,57 @@ async function refresh() {
 $("refresh").onclick = refresh;
 $("search").oninput = listRuns;
 $("reload").onclick = () => selected && selectRun(selected);
+function updateSceneTime(t) {
+  if (!Number.isFinite(t)) return;
+  hoverTime = t;
+  $("scene-time").textContent = `t = ${t.toFixed(3)} s`;
+  viewer?.setTime(t);
+}
+function applyView() {
+  document.body.classList.toggle("split-view", viewMode === "split");
+  document
+    .querySelectorAll('input[name="layout"]')
+    .forEach((input) => (input.checked = input.value === viewMode));
+  $("scene-panel").hidden = viewMode !== "split";
+  if (viewMode === "split" && payload?.scene && !viewer) {
+    try {
+      viewer = new FlightScene(
+        $("scene-canvas"),
+        $("trajectory-controls"),
+        $("pose-status"),
+        payload.scene,
+      );
+      updateSceneTime(hoverTime ?? payload.scene.initial_time);
+    } catch (error) {
+      $("scene-canvas").replaceChildren(
+        el(
+          "p",
+          "3D 뷰어를 열 수 없습니다. WebGL 지원을 확인하세요. " + error.message,
+          "warning",
+        ),
+      );
+    }
+  }
+  viewer?.resizeView();
+}
+document.querySelectorAll('input[name="layout"]').forEach(
+  (input) =>
+    (input.onchange = () => {
+      viewMode = input.value;
+      try {
+        localStorage.setItem("adr-review-layout", viewMode);
+      } catch {}
+      applyView();
+    }),
+);
+$("fit-scene").onclick = () => viewer?.fit();
+$("top-scene").onclick = () => viewer?.fit(true);
+applyView();
 function dispose() {
+  viewer?.dispose();
+  viewer = null;
+  payload = null;
+  hoverTime = null;
   observers.forEach((o) => o.disconnect());
   plots.forEach((p) => p.destroy());
   plots = [];
@@ -120,6 +178,8 @@ async function selectRun(id) {
       null,
       2,
     );
+    applyView();
+    renderErrors(d.error_report);
     renderCharts(d.series);
   } catch (e) {
     if (ticket !== request) return;
@@ -147,11 +207,16 @@ $("copy").onclick = async () => {
   }
 };
 const labels = {
+  klt_features: "KLT active tracks",
+  klt_observations: "KLT camera observations",
+  tracker_active_features: "Active tracker IDs",
+  tracker_is_klt: "KLT tracker enabled",
   slam_features: "SLAM landmarks",
   msckf_update_features: "MSCKF update features",
   loop_triangulated_features: "Triangulated loop features",
   slam_capacity: "SLAM capacity",
   slam_utilization_pct: "SLAM capacity used",
+  tracking_error_sync_m: "Actual ↔ plan (추종 오차)",
   raw_error_sync_m: "Raw VIO ↔ actual",
   corrected_error_sync_m: "Corrected VIO ↔ actual",
 };
@@ -187,8 +252,9 @@ function renderCharts(all) {
     [
       "특징점 수",
       "count",
-      "SLAM은 필터 상태에 유지되는 점, MSCKF는 최근 업데이트 점입니다. 전체 KLT 추적점 수가 아닙니다.",
+      "KLT는 현재 추적점 전체(새 점 포함), SLAM은 유지 중인 landmarks, MSCKF는 업데이트에 사용된 점입니다.",
       [
+        "klt_features",
         "slam_features",
         "msckf_update_features",
         "loop_triangulated_features",
@@ -202,10 +268,10 @@ function renderCharts(all) {
       ["slam_utilization_pct"],
     ],
     [
-      "위치 오차",
+      "APE · 위치 오차",
       "m",
       "동일 시각으로 보간한 실제 궤적과의 3D 거리. 긴 데이터 공백은 제외합니다.",
-      ["raw_error_sync_m", "corrected_error_sync_m"],
+      ["raw_error_sync_m", "corrected_error_sync_m", "tracking_error_sync_m"],
     ],
     [
       "처리 시간",
@@ -341,7 +407,7 @@ function chart(title, unit, description, keys, all) {
   const data = aligned(keys, all);
   const p = new uPlot(
     {
-      width: Math.max(260, target.clientWidth),
+      width: Math.max(180, target.clientWidth),
       height: 260,
       padding: [16, 16, 0, 0],
       legend: { show: false },
@@ -378,6 +444,10 @@ function chart(title, unit, description, keys, all) {
       hooks: {
         setCursor: [
           (u) => {
+            // Only the plot under the mouse drives 3D; synchronized recipients may
+            // have different sample ranges. Use the actual cursor time, not its index.
+            if (target.matches(":hover") && u.cursor.left >= 0)
+              updateSceneTime(u.posToVal(u.cursor.left, "x"));
             keys.forEach((k, i) => {
               const v =
                 u.cursor.idx == null ? null : u.data[i + 1][u.cursor.idx];
@@ -397,10 +467,37 @@ function chart(title, unit, description, keys, all) {
   );
   const observer = new ResizeObserver(() => {
     if (target.clientWidth > 0)
-      p.setSize({ width: Math.max(260, target.clientWidth), height: 260 });
+      p.setSize({ width: Math.max(180, target.clientWidth), height: 260 });
   });
   observer.observe(target);
   observers.push(observer);
   plots.push(p);
 }
 refresh();
+
+function renderErrors(report) {
+  const select = $("error-period");
+  select.replaceChildren(...report.periods.map((p, i) => {
+    const option = el("option", p.label + (p.complete ? "" : p.recorded ? " · 미완료" : " · 미기록"));
+    option.value = String(i);
+    return option;
+  }));
+  select.disabled = !report.periods.length;
+  $("error-notes").replaceChildren(...report.notes.map(n => el("p", n)));
+  const draw = () => {
+    const body = $("error-table").querySelector("tbody");
+    body.replaceChildren();
+    const p = report.periods[Number(select.value)];
+    $("error-window").textContent = p ? `${p.start_s.toFixed(2)}–${p.end_s.toFixed(2)} s · ${p.complete ? "전체 구간 기록" : "일부 또는 전체 구간 미기록"}` : "평가할 구간이 없습니다.";
+    if (!p) return;
+    for (const [key, label] of [["raw", "Raw VIO ↔ 실제"], ["corrected", "보정 VIO ↔ 실제"], ["tracking", "실제 ↔ 계획 (추종)"]]) {
+      const s = p.comparisons[key], tr = el("tr");
+      tr.append(el("th", label));
+      for (const v of [s.rmse_m, s.mean_ape_m, s.p95_m, s.max_m, ...s.xyz_rmse_m]) tr.append(el("td", v == null ? "—" : v.toFixed(3)));
+      tr.append(el("td", `${s.coverage_pct.toFixed(1)}% (${s.samples}/${s.expected_samples})`));
+      body.append(tr);
+    }
+  };
+  select.onchange = draw;
+  draw();
+}

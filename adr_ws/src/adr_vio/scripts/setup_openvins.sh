@@ -36,6 +36,7 @@ for p in "$SRC_DIR/adr_vio/patches"/*.patch; do
     echo "[setup_openvins] 패치 적용: $(basename "$p")"
   else
     echo "[setup_openvins] !! 패치 실패: $(basename "$p") — OV_REF 가 v2.7 이 아닐 수 있다" >&2
+    exit 1
   fi
 done
 

@@ -11,7 +11,14 @@ sys.path[:0] = [
     str(REPO / "adr_ws/src/adr_vio"),
     str(REPO / "adr_ws/src/adr_bringup"),
 ]
-from analysis import load_flight, gate_hits, crossings, reduce_series, gate_figure
+from analysis import (
+    load_flight,
+    gate_hits,
+    crossings,
+    reduce_series,
+    gate_figure,
+    scene_data,
+)
 from app import create_app
 from adr_vio.metrics_core import MetricStore, TimingTail
 from adr_bringup.flight_session import new_session, repository_root
@@ -110,6 +117,7 @@ def test_twelve_gate_figure(tmp_path):
 
     with Image.open(path) as im:
         assert im.height > 1500 and im.width > 2000
+        assert im.convert("RGB").getpixel((0, 0)) == (255, 255, 255)
     assert len(hits) == 12
 
 
@@ -138,3 +146,28 @@ def test_large_correction_jump_marked(tmp_path):
     data["poses"]["corrected"] = [[101.9, -1, 0, 1.5], [102.1, 1, 0, 1.5]]
     hit = gate_hits(data)[1]["corrected"][0]
     assert hit["jump"] is True
+
+
+def test_tracker_full_rate_and_scene_time(tmp_path):
+    folder = make_bag(tmp_path)
+    data = load_flight(folder)
+    klt = data["series"]["klt_features"]
+    assert len(klt) > len(data["series"]["slam_features"])
+    assert min(p[1] for p in klt) == 0
+    assert next(p[0] for p in klt if p[1] == 0) == pytest.approx(44 / 30)
+    scene = scene_data(data)
+    assert scene["plan_time_aligned"] is True
+    assert len(scene["trajectories"]["actual"][0]) == 8
+    assert scene["trajectories"]["actual"][0][0] == 0
+    assert scene["trajectories"]["plan"][0][4:] == [1.0, 0.0, 0.0, 0.0]
+    assert len(scene["gates"]) == 6
+    response = create_app(tmp_path).test_client().get("/api/runs/" + folder.name)
+    assert response.json["scene"] == scene
+
+
+def test_legacy_bag_klt_not_fabricated(tmp_path):
+    data = load_flight(make_bag(tmp_path, include_tracker=False))
+    assert "klt_features" not in data["series"]
+    assert any("KLT 수치가 없습니다" in w for w in data["warnings"])
+    data["track_start"] = None
+    assert scene_data(data)["plan_time_aligned"] is False

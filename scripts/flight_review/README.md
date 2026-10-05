@@ -5,12 +5,15 @@
 
 ## 비행 기록
 
-ROS 환경에서 변경한 패키지를 빌드한다. 새 의존성은 `rosdep`으로 설치한다.
+ROS 환경에서 OpenVINS 계측 패치를 적용하고 변경한 패키지를 빌드한다.
+새 의존성은 `rosdep`으로 설치한다. `setup_openvins.sh`는 기존 checkout에도 아직 적용하지 않은
+패치를 적용한다. 패치 실패 시 중단하므로 실패 상태에서 빌드를 진행하지 않는다.
 
 ```bash
+adr_ws/src/adr_vio/scripts/setup_openvins.sh
 cd adr_ws
 rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install --packages-select adr_msgs adr_vio adr_bringup
+colcon build --symlink-install --packages-select ov_core ov_init ov_msckf adr_msgs adr_vio adr_bringup
 source install/setup.bash
 ros2 launch adr_bringup step1.launch.py map:=figure8 laps:=3 vio_profile:=slam_dense
 ```
@@ -55,10 +58,18 @@ uv run --with-requirements scripts/flight_review/requirements.txt python scripts
 또는 별도 venv에 `pip install -r scripts/flight_review/requirements.txt` 후 실행한다.
 `http://127.0.0.1:5050`에 접속한다. 다른 컴퓨터에서 가져온 세션도 폴더 전체를 복사한 뒤
 `--root /path/to/flight_logs`로 열 수 있다. 포트는 `--port 5051`로 변경 가능하다.
-uPlot 1.6.32와 라이선스를 vendor로 포함해 CDN 연결이 필요 없다.
+uPlot 1.6.32, Three.js 0.160.1/OrbitControls와 라이선스를 vendor로 포함해 CDN 연결이 필요 없다.
+코드 업데이트 후 실행 중인 Flask 서버를 재시작하고 브라우저를 새로고침한다.
 
 - 접을 수 있는 사이드바에서 기록 선택·검색. 새 비행은 새로고침으로 표시.
-- 상단 4열 × ceil(게이트 수/4) 정면 통과점 PNG. 복사 버튼과 PNG 다운로드.
+- 우상단 **보기 옵션**에서 그래프만 / **3D + 그래프 이분할** 선택. 선택은 브라우저에 저장.
+- 이분할 왼쪽은 스크롤 중에도 유지되는 3D 뷰어, 오른쪽은 통과점 이미지와 그래프.
+- 궤적별 Plan / Actual / Corrected VIO / Raw VIO 체크박스로 선과 위치 마커를 함께 표시/숨김.
+- 3D에서 드래그 회전, 우클릭 이동, 휠 확대. 전체 보기/위에서 보기 버튼 제공. WebGL 지원 필요.
+- 그래프 호버 시각에 각 궤적의 구·기체 3축·지면(z=0) 점선 표시. 마우스를 옮겨도 마지막 시각 유지.
+- 위치는 선형 보간, 자세는 quaternion의 shortest-arc SLERP. 0.3초 초과 pose 공백이나 기록 범위 밖은 마커를 숨긴다.
+- 계획 궤적의 축은 기록된 계획 yaw만 반영하며 roll/pitch는 추정하지 않는다. TRACK 시각이 없는 계획은 선만 표시.
+- 상단 4열 × ceil(게이트 수/4) **흰 배경** 정면 통과점 PNG. 복사 버튼과 PNG 다운로드.
 - 모든 그래프의 시간 커서가 연동됨. 드래그 확대, 더블클릭 복원.
 - 체크박스+이름 버튼으로 시리즈 표시/숨김. 호버 시 각 값 표시.
 - 현재 기록도 읽을 수 있지만 자동 갱신하지 않는다. **기록 다시 읽기** 사용.
@@ -71,6 +82,9 @@ uPlot 1.6.32와 라이선스를 vendor로 포함해 CDN 연결이 필요 없다.
 
 | 항목 | 의미 |
 |---|---|
+| `klt_features` | 추적기의 현재 ID 전체(새로 검출된 점 포함), stereo 중복 ID는 한 번만 계산 |
+| `klt_observations` | 카메라별 관측 수 합계. 현재 mono 환경에서는 klt_features와 같음 |
+| `tracker_active_features`, `tracker_is_klt` | 사용 중인 추적기의 전체 ID 수와 KLT 활성 여부 |
 | `slam_features` | `/ov_msckf/points_slam` 점 수: 필터 상태에 유지 중인 SLAM landmarks |
 | `msckf_update_features` | `/ov_msckf/points_msckf`: 최근 MSCKF 업데이트에서 시각화하는 특징점 |
 | `loop_triangulated_features` | `/ov_msckf/loop_feats`: loop 연동용 삼각측량 점. loop closure 횟수가 아님 |
@@ -81,9 +95,17 @@ uPlot 1.6.32와 라이선스를 vendor로 포함해 CDN 연결이 필요 없다.
 | `*_speed_mps`, `*_yaw_deg`, `*_x/y/z_m` | 실제/보정/raw odometry 수치 |
 | `drift_*_m`, `pnp_*`, `gate_*` | PnP 보정량, 품질·재투영 오차·거리·게이트 ID, 검출 수 |
 
-전체 KLT 추적점 수, SLAM update 채택/기각 수, feature track 수명은 OpenVINS v2.7의
-기본 공개 토픽에서 제공하지 않으므로 이 값으로 가장하지 않는다. 해당 내부 수치를 추가하려면
-upstream 계측이 필요하다. `slam_features` 증가만으로 loop closure가 동작했다고 판단하면 안 된다.
+KLT는 `adr_vio/patches/0002-tracker-metrics.patch`로 계측한다. 추적기의 thread-safe
+`get_last_ids()`를 사용해 삼각측량/SLAM 선정 전의 현재 ID를 세며, 새로 검출한 점도 포함한다.
+따라서 수가 유지돼도 같은 점이 오래 유지됐다고 보장하지는 않는다. SLAM update 채택/기각 수와
+track 수명은 아직 계측하지 않는다.
+
+패치는 `/ov_msckf/tracking_metrics` (`diagnostic_msgs/DiagnosticArray`)를 각 처리 프레임의
+카메라 timestamp로 발행한다. `/adr/vio/metrics`에 최신값을 모으고 원본 토픽도 bag에 기록한다.
+뷰어는 원본이 있으면 10 Hz 집계 대신 원본 프레임별 KLT 값을 사용해 짧은 추적점 감소를 보존한다.
+새 패치로 OpenVINS를 재빌드한 이후의 비행부터 기록된다. 이전 bag에 KLT가 없으면 누락 안내를
+표시하며 0으로 채우거나 loop triangulated 수치로 대체하지 않는다. `use_klt: false`이면 KLT
+수치는 생략하고 `tracker_active_features`만 보고한다.
 
 `slam_dense` 검증은 **SLAM 특징점/사용률 → 처리시간 → VIO 주파수·지연 → 위치 오차**를 같은
 시각에서 함께 본다. 특징점이 늘어도 처리 시간이 카메라 주기를 넘고 지연이 쌓이거나
@@ -118,14 +140,40 @@ bag에는 위 metrics·세 pose·계획·제어 상태·OpenVINS pose/odom·PnP�
 
 ```bash
 uv run --with-requirements scripts/flight_review/requirements.txt --with pytest pytest -q scripts/flight_review/tests
+node --test scripts/flight_review/tests/test_pose.mjs
 # 실제 비행과 분리된 합성 데이터 미리보기
 uv run --with-requirements scripts/flight_review/requirements.txt python scripts/flight_review/tests/fixture_bag.py --root /tmp/adr-review-demo --gates 12
 uv run --with-requirements scripts/flight_review/requirements.txt python scripts/flight_review/app.py --root /tmp/adr-review-demo
 ```
 
-ROS 환경에서 첫 비행 시 `ros2 topic echo /adr/vio/metrics --once`, `ros2 bag info <세션>/bag`,
+ROS 환경에서 첫 비행 시 `ros2 topic echo /ov_msckf/tracking_metrics --once`,
+`ros2 topic echo /adr/vio/metrics --once`, `ros2 bag info <세션>/bag`,
 `session.json`의 message_counts를 확인한다. VIO가 활성화된 정상 비행에서는 metrics와 세 pose,
 trajectory에 데이터가 있어야 한다. 실제 ROS/DDS 및 rosbag2 writer 실행은 ROS 환경에서 확인해야 한다.
 
 근거: [OpenVINS v2.7 ROS2Visualizer](https://github.com/rpng/open_vins/blob/v2.7/ov_msckf/src/ros/ROS2Visualizer.cpp),
 [rosbag2 SQLite crash resilience](https://github.com/ros2/rosbag2/blob/rolling/rosbag2_storage_sqlite3/README.md).
+
+### 궤적 오차 통계
+
+오차 표에서 전체 비행(TRACK 구간) 또는 계획 랩을 선택합니다. Raw VIO와
+PnP 보정 VIO는 actual과 비교하고, actual과 plan의 차이는 추종 오차로 구분합니다.
+모든 값은 위치 단위 m이며 자세 오차를 포함하지 않습니다.
+
+- APE(t) = 같은 시각의 두 위치 사이 3D 거리. 그래프에서 시간별로 확인합니다.
+- ATE / RMSE = sqrt(mean(APE²)). 동일한 통계이므로 중복 열을 만들지 않습니다.
+- Mean APE, P95, Max 및 X/Y/Z RMSE를 함께 표시합니다.
+- 기존 map 좌표계에서 계산하며 추가 SE(3)/Sim(3) 정렬을 적용하지 않습니다.
+  Raw VIO에는 시스템의 최초 map 정렬이 이미 적용되어 있습니다.
+- TRACK 시작 기준 20 Hz 공통 평가 시각에 선형 보간합니다. 외삽 및 측정 간격
+  0.2초 초과 구간은 제외하고, 유효 샘플 수/예정 샘플 수를 표시합니다.
+  Max는 이 평가 시각들에서의 최대값이며 원본 모든 프레임의 최대값은 아닙니다.
+- 첫 랩은 TRACK 시작부터 계획의 마지막 게이트 통과 시각까지, 다음 랩은
+  직전 경계부터 다음 마지막 게이트 통과까지입니다. 반개구간으로 경계 중복을
+  방지합니다. 마지막 랩 이후 복귀 구간은 전체 통계에만 포함됩니다.
+  계획의 게이트 순서를 확인할 수 없으면 해당 랩부터 통계를 생략합니다.
+- 미완료/미기록 랩은 해당 상태를 표시하고 누락 구간을 유효 비율에 반영합니다.
+  랩 구간이 기록되었다는 표시는 실제 게이트 통과 성공 판정이 아닙니다.
+  TRACK 시작 시각이 없는 기록은 시간 대응 통계를 계산하지 않습니다.
+
+정의 참고: [evo — APE / ATE metrics](https://github.com/MichaelGrupp/evo/wiki/Metrics).

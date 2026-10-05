@@ -8,7 +8,7 @@ from pathlib import Path
 import threading
 
 from flask import Flask, jsonify, render_template, send_file, abort
-from analysis import load_flight, gate_figure, reduce_series
+from analysis import load_flight, gate_figure, reduce_series, scene_data
 
 
 def create_app(root=None):
@@ -50,10 +50,11 @@ def create_app(root=None):
             temporary = output / "gate-passages.tmp.png"
             gate_figure(data, temporary)
             os.replace(temporary, output / "gate-passages.png")
-            payload = {k: data[k] for k in ("meta", "duration", "warnings", "states")}
+            payload = {k: data[k] for k in ("meta", "duration", "warnings", "states", "error_report")}
             payload["series"] = {k: reduce_series(v) for k, v in data["series"].items()}
             payload["image_url"] = f"/api/runs/{run}/gates.png"
             payload["point_limit"] = 5000
+            payload["scene"] = scene_data(data)
             cache[run] = (signature, payload)
             # Bound server memory when browsing many runs.
             while len(cache) > 4:

@@ -31,6 +31,20 @@
           ☰</button
         ><span>Flight diagnostics</span
         ><span class="live-label">OFFLINE REVIEW</span>
+        <details id="view-options">
+          <summary>보기 옵션</summary>
+          <div class="view-menu">
+            <strong>화면 구성</strong>
+            <label
+              ><input type="radio" name="layout" value="graphs" checked />
+              그래프만</label
+            >
+            <label
+              ><input type="radio" name="layout" value="split" /> 3D + 그래프
+              이분할</label
+            >
+          </div>
+        </details>
       </header>
       <section id="empty">
         <span class="eyebrow">FLIGHT INTELLIGENCE</span>
@@ -51,42 +65,76 @@
         </div>
         <div id="summary"></div>
         <div id="warnings"></div>
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>게이트 통과점</h2>
-              <p>
-                정면 기준 · 계획 통과 시각 주변의 게이트 평면 교차점 · ×는 큰
-                위치 점프
-              </p>
-            </div>
-            <div class="actions">
-              <button id="copy">이미지 복사</button
-              ><a id="download" download="gate-passages.png">PNG 저장 ↗</a>
-            </div>
-          </div>
-          <img
-            id="gates"
-            alt="각 게이트의 계획, 실제, 보정 VIO, raw VIO 통과점"
-          />
-          <p class="footnote">
-            점이 없으면 해당 시간 구간에 평면 교차가 없거나 데이터가 부족한
-            것입니다. Raw VIO는 최초 map 정렬 후, PnP 보정 전 궤적입니다.
-          </p>
+        <section class="panel" id="error-panel">
+          <div class="panel-heading"><h2>궤적 오차 · m</h2><label>평가 구간 <select id="error-period" aria-label="오차 평가 구간"></select></label></div>
+          <p class="footnote">APE는 시각별 3D 위치 오차이며 ATE / RMSE는 APE의 제곱평균제곱근입니다. 자세 오차는 포함하지 않습니다.</p>
+          <p id="error-window" class="muted"></p>
+          <div class="error-table-wrap"><table id="error-table"><thead><tr><th>비교</th><th>ATE / RMSE</th><th>Mean APE</th><th>P95</th><th>Max</th><th>X RMSE</th><th>Y RMSE</th><th>Z RMSE</th><th>유효 샘플</th></tr></thead><tbody></tbody></table></div>
+          <div id="error-notes" class="footnote"></div>
         </section>
-        <div class="chart-heading">
-          <h2>비행 진단</h2>
-          <span>호버 동기화 · 드래그로 확대 · 더블클릭으로 초기화</span>
+        <div id="review-layout">
+          <section id="scene-panel" class="panel" hidden>
+            <div class="panel-heading">
+              <div>
+                <h2>3D 궤적</h2>
+                <p>왼쪽 드래그: 회전 · 오른쪽 드래그: 이동 · 휠: 확대/축소</p>
+              </div>
+            </div>
+            <div id="trajectory-controls" class="series-controls"></div>
+            <div class="scene-toolbar">
+              <span id="scene-time">그래프에서 시각 선택</span>
+              <div>
+                <button id="fit-scene">전체 보기</button
+                ><button id="top-scene">위에서 보기</button>
+              </div>
+            </div>
+            <div id="scene-canvas"></div>
+            <div id="pose-status"></div>
+            <p class="footnote">
+              구: 위치 · 3축: 기체 자세 (X 빨강 / Y 초록 / Z 파랑)<br />점선:
+              지면 z=0 → 위치 · Plan의 자세는 계획 yaw만 표시<br />그래프를
+              벗어나면 마지막 호버 시각을 유지합니다.
+            </p>
+          </section>
+          <div id="analysis-panel">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>게이트 통과점</h2>
+                  <p>
+                    정면 기준 · 계획 통과 시각 주변의 게이트 평면 교차점 · ×는
+                    큰 위치 점프
+                  </p>
+                </div>
+                <div class="actions">
+                  <button id="copy">이미지 복사</button
+                  ><a id="download" download="gate-passages.png">PNG 저장 ↗</a>
+                </div>
+              </div>
+              <img
+                id="gates"
+                alt="각 게이트의 계획, 실제, 보정 VIO, raw VIO 통과점"
+              />
+              <p class="footnote">
+                점이 없으면 해당 시간 구간에 평면 교차가 없거나 데이터가 부족한
+                것입니다. Raw VIO는 최초 map 정렬 후, PnP 보정 전 궤적입니다.
+              </p>
+            </section>
+            <div class="chart-heading">
+              <h2>비행 진단</h2>
+              <span>호버 동기화 · 드래그로 확대 · 더블클릭으로 초기화</span>
+            </div>
+            <div id="charts"></div>
+            <details class="panel">
+              <summary>기록 메타데이터 · 상태 전이</summary>
+              <pre id="metadata"></pre>
+            </details>
+          </div>
         </div>
-        <div id="charts"></div>
-        <details class="panel">
-          <summary>기록 메타데이터 · 상태 전이</summary>
-          <pre id="metadata"></pre>
-        </details>
       </div>
       <div id="toast" role="status"></div>
     </main>
     <script src="/static/vendor/uPlot.iife.min.js"></script>
-    <script src="/static/app.js"></script>
+    <script type="module" src="/static/app.js"></script>
   </body>
 </html>

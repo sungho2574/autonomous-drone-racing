@@ -43,6 +43,7 @@ def bag_rows(folder):
         raise ValueError("SQLite bag가 아직 없거나 이 기록은 SQLite 형식이 아닙니다.")
     wanted = set(POSE_TOPICS) | {
         "/adr/vio/metrics",
+        "/ov_msckf/tracking_metrics",
         "/adr/controller_state",
         "/adr/trajectory",
     }
@@ -82,6 +83,7 @@ def load_flight(folder):
     if defs:
         store.register(defs)
     metrics = []
+    tracker_metrics = []
     poses = {k: [] for k in ("actual", "raw", "corrected")}
     states = []
     poly = None
@@ -100,7 +102,7 @@ def load_flight(folder):
             row = [stamp(msg.header), p.x, p.y, p.z, q.w, q.x, q.y, q.z]
             if all(math.isfinite(float(x)) for x in row):
                 poses[POSE_TOPICS[topic]].append(row)
-        elif topic == "/adr/vio/metrics":
+        elif topic in ("/adr/vio/metrics", "/ov_msckf/tracking_metrics"):
             values = {}
             for status in msg.status:
                 for kv in status.values:
@@ -110,7 +112,8 @@ def load_flight(folder):
                             values[kv.key] = v
                     except ValueError:
                         pass
-            metrics.append((stamp(msg.header), values))
+            destination = metrics if topic == "/adr/vio/metrics" else tracker_metrics
+            destination.append((stamp(msg.header), values))
         elif topic == "/adr/controller_state":
             states.append((t, msg.data))
         elif topic == "/adr/trajectory" and poly is None:
@@ -118,7 +121,7 @@ def load_flight(folder):
     poses = {k: clean_rows(v) for k, v in poses.items()}
     metrics = sorted({t: v for t, v in metrics}.items())
     source_times = [r[0] for rows in poses.values() for r in rows]
-    source_times += [t for t, _ in metrics]
+    source_times += [t for t, _ in metrics] + [t for t, _ in tracker_metrics]
     if not source_times:
         raise ValueError(
             "기록에서 pose/metrics 샘플을 찾지 못했습니다. 녹화 시작 전이거나 데이터가 없습니다."
@@ -141,32 +144,33 @@ def load_flight(folder):
             break
     plan = []
     if poly is not None:
+
+        def segment_pose(seg, dt):
+            xyz = [
+                float(np.polynomial.polynomial.polyval(dt, getattr(seg, "c" + axis)))
+                for axis in "xyz"
+            ]
+            yaw = (
+                float(np.polynomial.polynomial.polyval(dt, seg.cyaw))
+                if len(seg.cyaw)
+                else None
+            )
+            # A plan supplies yaw, not measured roll/pitch. Display yaw-only axes.
+            q = (
+                [math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]
+                if yaw is not None
+                else [0.0, 0.0, 0.0, 0.0]
+            )
+            return [*xyz, *q]
+
         offset = 0.0
         for seg in poly.segments:
             for dt in np.arange(0, seg.duration, 0.02):
-                xyz = [
-                    float(
-                        np.polynomial.polynomial.polyval(dt, getattr(seg, "c" + axis))
-                    )
-                    for axis in "xyz"
-                ]
-                plan.append([offset + dt, *xyz])
+                plan.append([offset + dt, *segment_pose(seg, dt)])
             offset += seg.duration
         if poly.segments:
             seg = poly.segments[-1]
-            plan.append(
-                [
-                    offset,
-                    *[
-                        float(
-                            np.polynomial.polynomial.polyval(
-                                seg.duration, getattr(seg, "c" + axis)
-                            )
-                        )
-                        for axis in "xyz"
-                    ],
-                ]
-            )
+            plan.append([offset, *segment_pose(seg, seg.duration)])
         if start is not None:
             plan = [[start + r[0] / scale, *r[1:]] for r in plan]
         else:
@@ -181,6 +185,16 @@ def load_flight(folder):
     for t, values in metrics:
         for k, v in values.items():
             series.setdefault(k, []).append([t - origin, v])
+    # Prefer camera-stamped, per-frame tracker values over 10 Hz aggregate samples.
+    tracker_series = {}
+    for t, values in tracker_metrics:
+        for key, value in values.items():
+            tracker_series.setdefault(key, []).append([t - origin, value])
+    series.update({key: clean_rows(rows) for key, rows in tracker_series.items()})
+    if not series.get("klt_features"):
+        warnings.append(
+            "KLT 수치가 없습니다. 이전 기록에는 소급 추가할 수 없습니다. 새 비행은 OpenVINS tracker-metrics 패치 적용/재빌드 및 use_klt 설정을 확인하세요."
+        )
     # Full per-update CSV preserves timing spikes between the 10 Hz aggregate messages.
     timing_path = folder / "openvins_timing.csv"
     if timing_path.is_file():
@@ -217,24 +231,6 @@ def load_flight(folder):
     if start is not None:
         for axis, index in zip("xyz", (1, 2, 3)):
             series["plan_" + axis + "_m"] = [[r[0] - origin, r[index]] for r in plan]
-    # Timestamp-aligned Euclidean position errors, never extrapolated over gaps.
-    ref = np.asarray(poses["actual"])
-    if len(ref) > 1:
-        for name in ("raw", "corrected"):
-            errors = []
-            for row in poses[name]:
-                i = np.searchsorted(ref[:, 0], row[0])
-                if i == 0 or i == len(ref) or ref[i, 0] - ref[i - 1, 0] > 0.2:
-                    continue
-                alpha = (row[0] - ref[i - 1, 0]) / (ref[i, 0] - ref[i - 1, 0])
-                truth = ref[i - 1, 1:4] + alpha * (ref[i, 1:4] - ref[i - 1, 1:4])
-                errors.append(
-                    [
-                        row[0] - origin,
-                        float(np.linalg.norm(np.asarray(row[1:4]) - truth)),
-                    ]
-                )
-            series[name + "_error_sync_m"] = errors
     for name, rows in poses.items():
         if not rows:
             warnings.append(f"{LABELS[name]} pose 데이터가 없습니다.")
@@ -250,7 +246,7 @@ def load_flight(folder):
         warnings.append(
             "종료 메타데이터가 없는 기록입니다. 진행 중이거나 비정상 종료됐을 수 있습니다. 저장된 구간만 표시합니다."
         )
-    return dict(
+    data = dict(
         meta=meta,
         course=course,
         poses=poses,
@@ -262,6 +258,10 @@ def load_flight(folder):
         duration=max(source_times) - origin,
         states=[[t - origin, s] for t, s in states],
     )
+
+    from errors import error_report
+    data["error_report"] = error_report(data)
+    return data
 
 
 def crossings(rows, gate, max_gap=0.3):
@@ -358,9 +358,9 @@ def gate_figure(data, destination):
     hits = gate_hits(data)
     cols = 4
     rows = math.ceil(len(gates) / cols)
-    with plt.style.context("dark_background"):
+    with plt.style.context("default"):
         fig, axes = plt.subplots(rows, cols, figsize=(16, rows * 3.7), squeeze=False)
-        fig.patch.set_facecolor("#10141c")
+        fig.patch.set_facecolor("white")
         inner = data["course"]["gate"]["inner_size"]
         outer = data["course"]["gate"]["outer_size"]
         all_offsets = [
@@ -372,7 +372,7 @@ def gate_figure(data, destination):
         ]
         bound = max(outer / 2 + 0.35, max(all_offsets, default=0) * 1.08)
         for ax, gate in zip(axes.flat, gates):
-            ax.set_facecolor("#151c28")
+            ax.set_facecolor("white")
             ax.add_patch(
                 Rectangle(
                     (-outer / 2, -outer / 2),
@@ -394,7 +394,13 @@ def gate_figure(data, destination):
                     ls="--",
                 )
             )
-            for name, color in COLORS.items():
+            print_colors = {
+                "plan": "#2e7d32",
+                "actual": "#d32f2f",
+                "corrected": "#1565c0",
+                "raw": "#7b1fa2",
+            }
+            for name, color in print_colors.items():
                 points = hits[gate["id"]][name]
                 good = [h for h in points if not h.get("jump")]
                 jumps = [h for h in points if h.get("jump")]
@@ -443,7 +449,11 @@ def reduce_series(points, limit=5000):
     """Keep extrema and explicit gap markers, so downsampling cannot hide outages."""
     if not points:
         return []
-    gaps = [
+    explicit = [p for p in points if p[1] is None]
+    points = [p for p in points if p[1] is not None]
+    if not points:
+        return explicit[:1] + explicit[-1:]
+    gaps = explicit + [
         [(a[0] + b[0]) / 2, None]
         for a, b in zip(points, points[1:])
         if b[0] - a[0] > 0.5
@@ -459,3 +469,26 @@ def reduce_series(points, limit=5000):
             result.extend(chunk[i].tolist() for i in indices)
         result.append(points[-1])
     return sorted({p[0]: p for p in result + gaps}.values(), key=lambda p: p[0])
+
+
+def scene_data(data):
+    """Full pose samples for accurate hover interpolation, in the same time base as charts."""
+    origin = data["origin"]
+    trajectories = {
+        name: [[r[0] - origin, *r[1:]] for r in rows]
+        for name, rows in data["poses"].items()
+    }
+    aligned = data["track_start"] is not None
+    trajectories["plan"] = [
+        [r[0] - origin if aligned else r[0], *r[1:]] for r in data["plan"]
+    ]
+    return {
+        "gates": data["course"]["gates"],
+        "gate": data["course"]["gate"],
+        "trajectories": trajectories,
+        "plan_time_aligned": aligned,
+        "plan_max_gap_s": max(
+            0.3, 0.021 / float(data["meta"]["parameters"].get("time_scale", 1))
+        ),
+        "initial_time": data["track_start"] - origin if aligned else 0.0,
+    }

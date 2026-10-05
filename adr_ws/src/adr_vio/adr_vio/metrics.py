@@ -1,7 +1,7 @@
 """Public OpenVINS observables → /adr/vio/metrics (DiagnosticArray, 10 Hz).
 
 Cloud counts have distinct semantics: in-state SLAM, last MSCKF update, and
-triangulated loop features. None is the number of all live KLT tracks.
+triangulated loop features. Patched tracker diagnostics separately report KLT IDs.
 Missing/stale values are omitted, never silently reported as zero.
 """
 
@@ -56,6 +56,7 @@ class VioMetrics(Node):
             "/ov_msckf/loop_feats",
             lambda m: self.point("loop_triangulated_features", len(m.points), m.header),
         )
+        sub(DiagnosticArray, "/ov_msckf/tracking_metrics", self.tracking)
         sub(Image, "/adr/camera/image_raw", lambda m: self.rate("camera", m.header))
         sub(Imu, "/adr/imu", lambda m: self.rate("imu", m.header))
         sub(Odometry, "/adr/vio/odom", lambda m: self.odom("raw_vio", m))
@@ -72,6 +73,22 @@ class VioMetrics(Node):
         sub(GateDetectionArray, "/adr/gate_detections", self.detections)
         sub(GatePnP, "/adr/pnp/gate", self.pnp)
         self.create_timer(0.1, self.publish)
+
+    def tracking(self, msg):
+        self.rate("tracker", msg.header)
+        allowed = {
+            "klt_features",
+            "klt_observations",
+            "tracker_is_klt",
+            "tracker_active_features",
+        }
+        for status in msg.status:
+            for item in status.values:
+                if item.key in allowed:
+                    try:
+                        self.put(item.key, float(item.value))
+                    except ValueError:
+                        continue
 
     def put(self, k, v):
         self.store.put(k, v, time.monotonic())
@@ -148,7 +165,7 @@ class VioMetrics(Node):
             if data.get("raw_vio_age_s", float("inf")) < 2
             else DiagnosticStatus.STALE
         )
-        status.message = "Public observables; unavailable/stale fields omitted; KLT total not exposed"
+        status.message = "Public observables; unavailable/stale fields omitted; KLT requires tracker-metrics patch"
         status.values = [KeyValue(key=k, value=str(v)) for k, v in sorted(data.items())]
         msg.status = [status]
         self.pub.publish(msg)

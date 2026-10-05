@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO / "adr_ws/src/adr_bringup"))
 from adr_bringup.flight_session import new_session, atomic_json
 
 
-def make_bag(root, gates=6, status="completed"):
+def make_bag(root, gates=6, status="completed", include_tracker=True):
     course = {
         "gate": {"inner_size": 1.5, "outer_size": 2.1},
         "gates": [
@@ -118,6 +118,31 @@ def make_bag(root, gates=6, status="completed"):
                 ),
             )
             write(topic, odom, 100 + t)
+        if include_tracker:
+            # One-frame loss between 10 Hz aggregate ticks must survive in the viewer.
+            count = 0 if i == 44 else 250 + i % 30
+            kv = [
+                msg("diagnostic_msgs/msg/KeyValue", k, str(v))
+                for k, v in {
+                    "klt_features": count,
+                    "klt_observations": count,
+                    "tracker_active_features": count,
+                    "tracker_is_klt": 1,
+                }.items()
+            ]
+            tracking = msg(
+                "diagnostic_msgs/msg/DiagnosticStatus",
+                0,
+                "openvins/tracker",
+                "demo",
+                "synthetic",
+                kv,
+            )
+            write(
+                "/ov_msckf/tracking_metrics",
+                msg("diagnostic_msgs/msg/DiagnosticArray", header(100 + t), [tracking]),
+                100 + t,
+            )
         if i % 3 == 0:
             values = {
                 "slam_features": 70 + 20 * np.sin(t / 3),

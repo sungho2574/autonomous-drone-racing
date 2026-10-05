@@ -21,6 +21,7 @@ import rosbag2_py
 from adr_bringup.flight_session import atomic_json
 
 TOPICS = {
+    "/ov_msckf/tracking_metrics": "diagnostic_msgs/msg/DiagnosticArray",
     "/adr/vio/metrics": "diagnostic_msgs/msg/DiagnosticArray",
     "/adr/controller_state": "std_msgs/msg/String",
     "/adr/trajectory": "adr_msgs/msg/PolynomialTrajectory",
