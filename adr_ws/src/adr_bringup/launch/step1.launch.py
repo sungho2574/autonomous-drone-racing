@@ -21,7 +21,7 @@ from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, Log
                             OpaqueFunction, TimerAction, SetLaunchConfiguration)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -111,6 +111,8 @@ def _recorded_start(context, actions, controller='position'):
     params['effective_vio']={key:estimator.get(key) for key in ('max_clones','max_slam','max_slam_in_update','max_msckf_in_update','num_pts','track_frequency')}
     if arg('vio_profile')=='slam_dense':
         params['effective_vio'].update(max_slam=100,max_slam_in_update=50)
+    if controller == 'a2rl' and arg('state_source') == 'measured':
+        params['effective_vio'].update(try_zupt=True, zupt_only_at_beginning=True)
     definitions={}
     for path in (Path(get_package_share_directory('adr_msgs'))/'msg').glob('*.msg'):
         definitions['adr_msgs/msg/'+path.stem]=path.read_text()
@@ -202,6 +204,9 @@ def generate_launch_description(controller='position'):
             launch_arguments={'use_sim_time': LaunchConfiguration('use_sim_time'),
                               'world': LaunchConfiguration('map'),
                               'profile': LaunchConfiguration('vio_profile'),
+                              'stationary_init': PythonExpression([
+                                  "'true' if '", LaunchConfiguration('state_source'),
+                                  "' == 'measured' else 'false'"]) if controller == 'a2rl' else 'false',
                               'timing_path': LaunchConfiguration('vio_timing_path'),
                               'imu_bridge': LaunchConfiguration('use_sim_time')}.items(),
             condition=IfCondition(LaunchConfiguration('vio'))),

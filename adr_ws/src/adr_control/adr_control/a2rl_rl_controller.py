@@ -218,6 +218,12 @@ class A2RLController(OffboardBase):
                     self.goto('TAKEOFF')
         elif self.state == 'TAKEOFF':
             self.hold()
+            if self.cfg['state_source'] == 'measured' and self._tick % 100 == 0:
+                age = None if self.vio_stamp is None else now - self.vio_stamp
+                self.get_logger().info(
+                    f'Takeoff: position_error={np.linalg.norm(observation["pos"]-self.hold_pos):.2f}m '
+                    f'speed={np.linalg.norm(observation["vel"]):.2f}m/s '
+                    f'VIO={"no samples (initialization/alignment pending)" if age is None else f"age={age:.3f}s"}')
             yaw = float(rpy_from_quat(observation['quat'])[2])
             yaw_err = abs((yaw - self.takeoff_yaw + np.pi) % (2 * np.pi) - np.pi)
             if (np.linalg.norm(observation['pos'] - self.hold_pos) < self.cfg['pos_tol']
@@ -227,7 +233,9 @@ class A2RLController(OffboardBase):
                 self.track_start = self.last_pass = now
                 self.goto('TRACK')
             elif elapsed > self.cfg['takeoff_timeout']:
-                self.abort('takeoff/VIO readiness timeout; RL was not started')
+                reason = ('VIO position unavailable/stale' if self.input_state() is None
+                          else 'takeoff position/velocity/yaw not settled')
+                self.abort(f'takeoff readiness timeout: {reason}; RL was not started')
         elif self.state == 'TRACK':
             if now - self.track_start > self.cfg['max_flight_time'] or now - self.last_pass > self.cfg['gate_timeout']:
                 self.abort('flight/gate progress timeout')

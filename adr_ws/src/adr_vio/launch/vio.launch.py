@@ -53,6 +53,10 @@ def _nodes(context, *args, **kwargs):
         'max_slam': 100,
         'max_slam_in_update': 50,  # sequential-update batch size, NOT per-frame total
     }
+    # Measured-state RL waits at takeoff for VIO. Permit initialization while
+    # stationary; ZUPT stops after the first detected motion, not throughout flight.
+    if arg('stationary_init').lower() in ('true', '1'):
+        overrides.update(try_zupt=True, zupt_only_at_beginning=True)
     timing_path = arg('timing_path')
     if timing_path:
         timing_path = os.path.abspath(os.path.expanduser(timing_path))
@@ -126,6 +130,7 @@ def generate_launch_description():
         DeclareLaunchArgument('profile', default_value='default'),
         DeclareLaunchArgument('timing_path', default_value=''),
         DeclareLaunchArgument('align_mode', default_value='yaw'),
+        DeclareLaunchArgument('stationary_init', default_value='false'),
         DeclareLaunchArgument('config', default_value=os.path.join(VIO_SHARE, 'config', 'estimator_config.yaml')),
         OpaqueFunction(function=_nodes),
     ])

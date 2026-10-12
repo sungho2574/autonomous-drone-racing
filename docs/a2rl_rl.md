@@ -121,7 +121,9 @@ ros2 launch adr_bringup a2rl_rl.launch.py state_source:=measured laps:=1
 | 자세 | 같은 PX4 메시지 q, NED/FRD → ENU/FLU, xyzw |
 | 각속도 | 같은 PX4 메시지 angular_velocity, FRD → FLU |
 
-OpenVINS 초기화를 위해 먼저 PX4 위치 제어로 이륙한다. 시작점에서 위치·속도·yaw가
+측정값 모드에서만 OpenVINS에 `try_zupt=true`, `zupt_only_at_beginning=true`를 적용해
+정지 상태에서도 초기화할 수 있게 한다. 움직임 감지 이후에는 초기 정지 보정을 종료한다.
+기존 GT/step1의 VIO 초기화 설정은 유지한다. 먼저 PX4 위치 제어로 이륙한다. 시작점에서 위치·속도·yaw가
 안정되고 신선한 VIO 위치가 들어와야 RL로 전환한다. 30초 안에 준비되지 않으면 착륙한다.
 RL 게이트 통과 판정도 선택한 위치를 사용한다. 완료 후 hold/착륙은 PX4 위치 제어다.
 GT 모드와 측정값 모드 모두 기본 50 Hz 정책을 유지한다.
@@ -135,3 +137,7 @@ VIO는 메시지 시각 기준 0.20초, PX4는 ROS 수신 시각 기준 0.10초 
 현재 `sim.launch.py ev:=true`는 PX4 EKF에 Gazebo 외부 위치를 주입한다.
 따라서 measured는 **정책의 GT 직접 입력을 없애는 옵션**이며, PX4 추정기 자체까지
 GT 독립으로 만드는 옵션은 아니다. VIO의 최초 map 정렬도 기존 PX4 기준 TF를 사용한다.
+
+2026-10-13 수정 검증: 기존 측정값 실행은 VIO odometry 0건으로 30초 후 착륙했다.
+정지 초기화 적용 후 Gazebo에서 VIO 초기화·map 정렬과 TAKEOFF → TRACK 전환을 확인했다.
+이륙 대기 로그에 위치 오차, 속도, VIO 수신 유무/나이를 출력한다.
