@@ -8,7 +8,7 @@ from pathlib import Path
 import threading
 
 from flask import Flask, jsonify, render_template, send_file, abort
-from analysis import load_flight, gate_figure, reduce_series, scene_data
+from analysis import load_flight, gate_figure, topview_figure, reduce_series, scene_data
 
 
 def create_app(root=None):
@@ -50,9 +50,13 @@ def create_app(root=None):
             temporary = output / "gate-passages.tmp.png"
             gate_figure(data, temporary)
             os.replace(temporary, output / "gate-passages.png")
+            temporary = output / "topview.tmp.png"
+            topview_figure(data, temporary)
+            os.replace(temporary, output / "topview.png")
             payload = {k: data[k] for k in ("meta", "duration", "warnings", "states", "error_report")}
             payload["series"] = {k: reduce_series(v) for k, v in data["series"].items()}
             payload["image_url"] = f"/api/runs/{run}/gates.png"
+            payload["topview_url"] = f"/api/runs/{run}/topview.png"
             payload["point_limit"] = 5000
             payload["scene"] = scene_data(data)
             cache[run] = (signature, payload)
@@ -106,6 +110,14 @@ def create_app(root=None):
         return send_file(
             session(run) / "review/gate-passages.png", mimetype="image/png", max_age=0
         )
+
+    @app.get("/api/runs/<run>/topview.png")
+    def topview(run):
+        try:
+            analyze(run)
+        except (ValueError, OSError, RuntimeError, sqlite3.DatabaseError) as exc:
+            return jsonify(error=str(exc)), 422
+        return send_file(session(run) / "review/topview.png", mimetype="image/png", max_age=0)
 
     return app
 

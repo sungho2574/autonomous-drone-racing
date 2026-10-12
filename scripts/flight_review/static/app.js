@@ -173,6 +173,8 @@ async function selectRun(id) {
     );
     $("gates").src = d.image_url + "?v=" + Date.now();
     $("download").href = d.image_url;
+    $("topview").src = d.topview_url + "?v=" + Date.now();
+    $("download-topview").href = d.topview_url;
     $("metadata").textContent = JSON.stringify(
       { metadata: d.meta, controller_states: d.states },
       null,
@@ -189,9 +191,8 @@ async function selectRun(id) {
     );
   }
 }
-$("copy").onclick = async () => {
+async function copyImage(url, message) {
   try {
-    const url = payload.image_url;
     if (!navigator.clipboard?.write || !window.ClipboardItem)
       throw Error(
         "이 브라우저는 이미지 복사를 지원하지 않습니다. PNG 저장을 사용하세요.",
@@ -201,11 +202,13 @@ $("copy").onclick = async () => {
       return r.blob();
     });
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    toast("전체 게이트 이미지를 복사했습니다.");
+    toast(message);
   } catch (e) {
     toast(e.message);
   }
 };
+$("copy").onclick = () => copyImage(payload.image_url, "전체 게이트 이미지를 복사했습니다.");
+$("copy-topview").onclick = () => copyImage(payload.topview_url, "탑뷰 이미지를 복사했습니다.");
 const labels = {
   pnp_assoc_best_px: "최선 코너 RMSE",
   pnp_assoc_second_px: "차선 코너 RMSE",

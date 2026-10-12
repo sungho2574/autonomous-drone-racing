@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO / "adr_ws/src/adr_bringup"))
 from adr_bringup.flight_session import new_session, atomic_json
 
 
-def make_bag(root, gates=6, status="completed", include_tracker=True, include_association=False, include_pnp=False):
+def make_bag(root, gates=6, status="completed", include_tracker=True, include_association=False, include_pnp=False, include_gt=False):
     course = {
         "gate": {"inner_size": 1.5, "outer_size": 2.1},
         "gates": [
@@ -125,6 +125,8 @@ def make_bag(root, gates=6, status="completed", include_tracker=True, include_as
                 ),
             )
             write(topic, odom, 100 + t)
+            if include_gt and topic == "/adr/odom":
+                write("/adr/ground_truth/odom", odom, 100 + t)
         if include_association:
             values = {"pnp_assoc_selected_id": 0 if i == 44 else 6,
                       "pnp_assoc_reason": 5 if i == 44 else 0,

@@ -17,6 +17,7 @@ from analysis import (
     crossings,
     reduce_series,
     gate_figure,
+    topview_figure,
     scene_data,
 )
 from app import create_app
@@ -114,9 +115,45 @@ def test_real_cdr_crash_bag_and_api(tmp_path):
     png = client.get("/api/runs/" + folder.name + "/gates.png")
     assert png.status_code == 200 and png.data[:8] == b"\x89PNG\r\n\x1a\n"
     assert (folder / "review/gate-passages.png").exists()
+    top = client.get(response.json["topview_url"])
+    assert top.status_code == 200 and top.data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert (folder / "review/topview.png").exists()
     assert client.get("/api/runs/does-not-exist").status_code == 404
     (tmp_path / "escape").symlink_to(HERE, target_is_directory=True)
     assert client.get("/api/runs/escape").status_code == 404
+
+
+@pytest.mark.parametrize('include_gt', [False, True])
+def test_topview_sources_and_pnp(tmp_path, monkeypatch, include_gt):
+    from matplotlib.figure import Figure
+    data = load_flight(make_bag(tmp_path, include_pnp=True, include_gt=include_gt))
+    assert bool(data['ground_truth']) == include_gt
+    figures = []
+    monkeypatch.setattr(Figure, 'savefig', lambda fig, *a, **kw: figures.append(fig))
+    topview_figure(data, tmp_path/'top.png')
+    ax = figures[0].axes[0]
+    labels = [line.get_label() for line in ax.lines]
+    assert ('Ground truth' in labels) == include_gt
+    assert ('PX4 odometry (GT unavailable)' in labels) == (not include_gt)
+    assert 'Raw VIO (map aligned)' in labels and 'PnP-corrected VIO' in labels
+    np.testing.assert_allclose(ax.collections[0].get_offsets(), [[1, 2]])
+    assert ax.get_aspect() == 1.0
+
+
+def test_topview_clips_divergence_to_gate_area(tmp_path, monkeypatch):
+    from matplotlib.figure import Figure
+    data = load_flight(make_bag(tmp_path, include_pnp=True, include_gt=True))
+    data['poses']['raw'].append([999, 10000, 20000, 1, 1, 0, 0, 0])
+    data['ground_truth'].append([999, 5000, 10000, 1, 1, 0, 0, 0])
+    data['pnp'].append([999, -10000, -10000, 1, 1])
+    figures = []
+    monkeypatch.setattr(Figure, 'savefig', lambda fig, *a, **kw: figures.append(fig))
+    topview_figure(data, tmp_path/'top.png')
+    ax = figures[0].axes[0]
+    assert max(abs(v) for v in (*ax.get_xlim(), *ax.get_ylim())) < 30
+    assert not ax.child_axes
+    # Rendering clips only; the recorded values are preserved.
+    assert data['poses']['raw'][-1][1] == 10000
 
 
 def test_twelve_gate_figure(tmp_path):

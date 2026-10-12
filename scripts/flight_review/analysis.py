@@ -48,6 +48,7 @@ def bag_rows(folder):
         "/adr/pnp/gate",
         "/adr/controller_state",
         "/adr/trajectory",
+        "/adr/ground_truth/odom",
     }
     for path in files:
         with sqlite3.connect(
@@ -88,6 +89,7 @@ def load_flight(folder):
     tracker_metrics = []
     association_metrics = []
     pnp = []
+    ground_truth = []
     poses = {k: [] for k in ("actual", "raw", "corrected")}
     states = []
     poly = None
@@ -100,12 +102,15 @@ def load_flight(folder):
             if note not in warnings:
                 warnings.append(note)
             continue
-        if topic in POSE_TOPICS:
+        if topic in POSE_TOPICS or topic == "/adr/ground_truth/odom":
             p = msg.pose.pose.position
             q = msg.pose.pose.orientation
             row = [stamp(msg.header), p.x, p.y, p.z, q.w, q.x, q.y, q.z]
             if all(math.isfinite(float(x)) for x in row):
-                poses[POSE_TOPICS[topic]].append(row)
+                if topic == "/adr/ground_truth/odom":
+                    ground_truth.append(row)
+                else:
+                    poses[POSE_TOPICS[topic]].append(row)
         elif topic == "/adr/pnp/gate":
             p = msg.pos_w
             row = [stamp(msg.header), p.x, p.y, p.z, int(msg.gate_id)]
@@ -128,10 +133,12 @@ def load_flight(folder):
         elif topic == "/adr/trajectory" and poly is None:
             poly = msg
     poses = {k: clean_rows(v) for k, v in poses.items()}
+    ground_truth = clean_rows(ground_truth)
     metrics = sorted({t: v for t, v in metrics}.items())
     source_times = [r[0] for rows in poses.values() for r in rows]
     source_times += [t for t, _ in association_metrics]
     source_times += [r[0] for r in pnp]
+    source_times += [r[0] for r in ground_truth]
     source_times += [t for t, _ in metrics] + [t for t, _ in tracker_metrics]
     if not source_times:
         raise ValueError(
@@ -264,6 +271,7 @@ def load_flight(folder):
         meta=meta,
         course=course,
         poses=poses,
+        ground_truth=ground_truth,
         pnp=sorted(pnp, key=lambda r: r[0]),
         plan=plan,
         origin=origin,
@@ -360,6 +368,89 @@ def gate_hits(data):
                 hit["jump"] = hit["jump_m"] > 0.75
                 out[gid][name].append(hit)
     return out
+
+
+def topview_figure(data, destination):
+    """Full-resolution XY projection; sparse PnP fixes remain crosses, not a path."""
+    from matplotlib.figure import Figure
+    from matplotlib.lines import Line2D
+
+    fig = Figure(figsize=(10, 10), layout="constrained", facecolor="white")
+    ax = fig.subplots()
+    gt = data.get("ground_truth", [])
+    actual = gt or data["poses"].get("actual", [])
+    paths = [
+        (actual, "Ground truth" if gt else "PX4 odometry (GT unavailable)", "#d32f2f"),
+        (data["poses"].get("raw", []), "Raw VIO (map aligned)", "#7b1fa2"),
+        (data["poses"].get("corrected", []), "PnP-corrected VIO", "#1565c0"),
+    ]
+    missing = []
+    for rows, label, color in paths:
+        if not rows:
+            missing.append(label)
+            continue
+        points = np.asarray(rows, dtype=float)
+        # Never connect separate recording intervals across long time gaps.
+        cuts = np.flatnonzero(np.diff(points[:, 0]) > 0.3) + 1
+        for i, part in enumerate(np.split(points, cuts)):
+            ax.plot(part[:, 1], part[:, 2], color=color, lw=1.3, alpha=0.85,
+                    label=label if i == 0 else None,
+                    marker="." if len(part) == 1 else None)
+    pnp = data.get("pnp", [])
+    if pnp:
+        points = np.asarray(pnp)
+        ax.scatter(points[:, 1], points[:, 2], marker="x", s=19, linewidths=0.8,
+                   color="#008577", alpha=0.65, label=f"PnP position ({len(pnp)})", zorder=4)
+    else:
+        missing.append("PnP position")
+
+    course = data["course"]
+    groups = {}
+    for gate in course.get("gates", []):
+        groups.setdefault((gate["x"], gate["y"]), []).append(gate)
+    width = float(course.get("gate", {}).get("outer_size", 2.1))
+    for (x, y), gates in groups.items():
+        # Vertical gates project to a segment along local Y, not their normal.
+        for gate in gates:
+            yaw = math.radians(gate["yaw_deg"])
+            normal = np.array([math.cos(yaw), math.sin(yaw)])
+            tangent = np.array([-normal[1], normal[0]])
+            ends = np.array([x, y]) + np.array([[-0.5], [0.5]]) * width * tangent
+            ax.plot(ends[:, 0], ends[:, 1], color="#e58c25", lw=4, zorder=5)
+            ax.annotate("", xy=np.array([x, y]) + normal * width * 0.65,
+                        xytext=(x, y), arrowprops=dict(arrowstyle="->", color="#b76913"), zorder=5)
+        label = " / ".join(f"G{g['id']} (z={g['z']:g})" for g in gates)
+        ax.annotate(label, (x, y), xytext=(6, 7), textcoords="offset points",
+                    fontsize=8, zorder=6, bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=1))
+    start = course.get("start")
+    if start:
+        ax.scatter([start["x"]], [start["y"]], marker="*", s=110,
+                   color="#333333", label="Map start", zorder=6)
+    handles, labels = ax.get_legend_handles_labels()
+    if groups:
+        handles.append(Line2D([], [], color="#e58c25", lw=4))
+        labels.append("Gate / arrow: passage direction")
+    if handles:
+        fig.legend(handles, labels, loc="outside lower center", ncol=2, fontsize=9)
+    ax.set(title=f"{data['meta'].get('track', 'Flight')} — top view (XY)",
+           xlabel="X / East [m]", ylabel="Y / North [m]")
+    ax.set_aspect("equal", adjustable="box")
+    ax.margins(0.12)
+    ax.grid(True, alpha=0.22)
+    focus = [[g['x'], g['y']] for g in course.get('gates', [])]
+    if start:
+        focus.append([start['x'], start['y']])
+    if focus:
+        bounds = np.asarray(focus)
+        lo, hi = bounds.min(axis=0), bounds.max(axis=0)
+        padding = max(float(np.max(hi - lo)) * 0.12, width * 2)
+        lo, hi = lo - padding, hi + padding
+        ax.set_xlim(lo[0], hi[0])
+        ax.set_ylim(lo[1], hi[1])
+    if missing:
+        ax.text(0.01, 0.01, "No data: " + ", ".join(missing), transform=ax.transAxes,
+                fontsize=8, color="#555555", wrap=True)
+    fig.savefig(destination, format="png", dpi=180)
 
 
 def gate_figure(data, destination):

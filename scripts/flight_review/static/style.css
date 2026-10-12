@@ -245,7 +245,7 @@ h2 {
   white-space: nowrap;
   font-size: 12px;
 }
-#gates {
+#gates, #topview {
   display: block;
   width: 100%;
   height: auto;
