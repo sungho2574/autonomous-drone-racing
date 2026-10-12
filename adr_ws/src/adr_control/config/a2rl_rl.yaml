@@ -3,7 +3,11 @@ a2rl_rl_controller:
     rate_hz: 50.0
     warmup_count: 100
     auto_arm: true
-    # All network state comes from Gazebo, never /adr/odom or VIO.
+    # gt: Gazebo state. measured: OpenVINS position + PX4 velocity/attitude/rates.
+    state_source: gt
+    vio_topic: /adr/vio/odom
+    vio_timeout: 0.20
+    px4_timeout: 0.10
     gt_topic: /adr/ground_truth/odom
     gt_timeout: 0.10
     control_gap_timeout: 0.10

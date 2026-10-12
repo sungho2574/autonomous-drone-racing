@@ -6,12 +6,13 @@ import numpy as np
 import pytest
 import yaml
 from nav_msgs.msg import Odometry
-from px4_msgs.msg import VehicleStatus
+from px4_msgs.msg import VehicleStatus, VehicleOdometry, VehicleLocalPosition
 import rclpy
 
 from adr_control.a2rl_gt import state_from_gt
-from adr_control.a2rl_runtime import PolicyRunner, load_map_from_config
+from adr_control.a2rl_runtime import PolicyRunner, load_map_from_config, rpy_from_quat
 from adr_control.a2rl_rl_controller import A2RLController
+from adr_control import frames as F
 
 ROOT = Path(__file__).parents[2]
 ASSETS = ROOT / 'adr_control/policies/a2rl_monorace'
@@ -137,3 +138,87 @@ def test_completed_lap_switches_to_hold(controller):
     node.step(.02)
     assert node.state == 'HOLD' and not sent and not lands
     assert modes == [dict(position=True)]
+
+
+def set_measured(node, clock):
+    node.cfg['state_source'] = 'measured'
+    local = VehicleLocalPosition()
+    local.xy_valid = local.z_valid = True
+    local.x, local.y, local.z = map(float, F.enu_to_ned(node.mp.start_pos))
+    node._on_local_position(local)
+    px4 = VehicleOdometry()
+    px4.pose_frame = VehicleOdometry.POSE_FRAME_NED
+    px4.velocity_frame = VehicleOdometry.VELOCITY_FRAME_NED
+    px4.q = F.quat_enu_flu_to_ned_frd(F.quat_from_yaw(node.takeoff_yaw)).astype(np.float32)
+    px4.velocity = np.array([2., 1., -3.], dtype=np.float32)
+    px4.angular_velocity = np.array([.1, .2, .3], dtype=np.float32)
+    node.on_px4_odometry(px4)
+    vio = Odometry()
+    vio.header.frame_id = 'map'
+    vio.header.stamp.sec = int(clock[0])
+    vio.pose.pose.position.x, vio.pose.pose.position.y, vio.pose.pose.position.z = map(float, node.mp.start_pos)
+    # VIO attitude/twist deliberately unusable: only its position is selected.
+    vio.twist.twist.linear.x = float('nan')
+    node.on_vio(vio)
+    return px4, vio
+
+
+def test_measured_subscriptions_exclude_gt():
+    rclpy.init(args=['--ros-args', '-p', 'use_sim_time:=true', '-p', f'gates_file:={MAP}',
+                    '-p', 'state_source:=measured'])
+    node = A2RLController()
+    try:
+        topics = {s.topic_name for s in node.subscriptions}
+        assert '/adr/vio/odom' in topics
+        assert '/fmu/out/vehicle_odometry' in topics
+        assert '/adr/ground_truth/odom' not in topics
+        assert node.state == 'WAIT_STATE'
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+def test_measured_input_uses_vio_position_and_px4_state(controller):
+    node, clock, sent, modes, lands = controller
+    set_measured(node, clock)
+    node.gt['pos'][:] = 9999
+    state = node.input_state()
+    np.testing.assert_allclose(state['pos'], node.mp.start_pos)
+    np.testing.assert_allclose(state['vel'], [1, 2, 3])
+    np.testing.assert_allclose(state['rates'], [.1, -.2, -.3])
+    assert float(rpy_from_quat(state['quat'])[2]) == pytest.approx(node.takeoff_yaw)
+    node.step(.02)
+    assert len(sent) == 1 and not lands
+
+
+@pytest.mark.parametrize('failure', ['vio_stale', 'px4_stale', 'frame', 'invalid_px4'])
+def test_measured_never_falls_back_to_gt(controller, failure):
+    node, clock, sent, modes, lands = controller
+    px4, vio = set_measured(node, clock)
+    if failure == 'vio_stale':
+        node.vio_stamp -= 1
+    elif failure == 'px4_stale':
+        node.px4_rates_time -= 1
+    elif failure == 'frame':
+        vio.header.frame_id = 'global'
+        node.on_vio(vio)
+    else:
+        px4.angular_velocity[0] = float('nan')
+        node.on_px4_odometry(px4)
+    assert node.fresh_gt()  # Healthy GT must not mask the measurement failure.
+    node.step(.02)
+    assert node.state == 'LAND' and lands and not sent
+
+
+def test_measured_takeoff_waits_for_vio_then_switches(controller):
+    node, clock, sent, modes, lands = controller
+    set_measured(node, clock)
+    node.px4_velocity[:] = 0
+    node.state = 'TAKEOFF'
+    node.hold_pos = node.mp.start_pos.copy()
+    node.vio_position = None
+    node.step(.02)
+    assert node.state == 'TAKEOFF' and not sent and not lands
+    node.vio_position = node.mp.start_pos.copy()
+    node.step(.02)
+    assert node.state == 'TRACK'

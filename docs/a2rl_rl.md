@@ -104,3 +104,34 @@ ROS_DOMAIN_ID=93 python3 -m pytest adr_ws/src/adr_control/test -q
 
 `adr_control/a2rl_runtime`은 전달된 `racing_runtime`의 6개 모듈이다.
 로컬 변경은 ONNX 세션 단일 스레드 설정, 입출력 형태 검증, 문서 경로 안내다.
+
+## 측정값으로 RL 실행
+
+```bash
+ros2 launch adr_bringup a2rl_rl.launch.py state_source:=measured laps:=1
+```
+
+`state_source:=gt`가 기존 기본값이며, `measured`에는 `vio:=true`가 필요하다.
+측정값 모드의 신경망 입력은 다음과 같다.
+
+| 입력 | 소스 |
+|---|---|
+| 위치 | `/adr/vio/odom`의 map 정렬된 OpenVINS 위치 (PnP 보정 전) |
+| 선속도 | PX4 `/fmu/out/vehicle_odometry` velocity, NED → ENU |
+| 자세 | 같은 PX4 메시지 q, NED/FRD → ENU/FLU, xyzw |
+| 각속도 | 같은 PX4 메시지 angular_velocity, FRD → FLU |
+
+OpenVINS 초기화를 위해 먼저 PX4 위치 제어로 이륙한다. 시작점에서 위치·속도·yaw가
+안정되고 신선한 VIO 위치가 들어와야 RL로 전환한다. 30초 안에 준비되지 않으면 착륙한다.
+RL 게이트 통과 판정도 선택한 위치를 사용한다. 완료 후 hold/착륙은 PX4 위치 제어다.
+GT 모드와 측정값 모드 모두 기본 50 Hz 정책을 유지한다.
+
+VIO는 메시지 시각 기준 0.20초, PX4는 ROS 수신 시각 기준 0.10초 이내여야 한다.
+서로 다른 clock인 PX4 boot timestamp를 ROS 시각과 직접 빼지 않는다.
+가장 최근의 두 소스를 조합하며 시간 보간/지연 예측은 하지 않는다.
+측정값 유실·잘못된 frame·NaN은 GT로 대체하지 않고 RL 중단/착륙 처리한다.
+`/adr/rl/debug`에 입력 상태, 소스, VIO 시각, PX4 수신 시각을 남긴다.
+
+현재 `sim.launch.py ev:=true`는 PX4 EKF에 Gazebo 외부 위치를 주입한다.
+따라서 measured는 **정책의 GT 직접 입력을 없애는 옵션**이며, PX4 추정기 자체까지
+GT 독립으로 만드는 옵션은 아니다. VIO의 최초 map 정렬도 기존 PX4 기준 TF를 사용한다.

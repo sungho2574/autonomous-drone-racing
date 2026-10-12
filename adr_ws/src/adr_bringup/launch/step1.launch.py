@@ -94,7 +94,8 @@ def _recorded_start(context, actions, controller='position'):
         import hashlib
         policy_dir = Path(get_package_share_directory('adr_control')) / 'policies/a2rl_monorace'
         params['policy_sha256'] = hashlib.sha256((policy_dir/'policy.onnx').read_bytes()).hexdigest()
-        params['rl_state_source'] = '/adr/ground_truth/odom'
+        params['rl_state_source'] = arg('state_source')
+        params['rl_position_topic'] = '/adr/ground_truth/odom' if arg('state_source') == 'gt' else '/adr/vio/odom'
         for filename in ('policy_meta.json', 'config_asrun.yaml'):
             path = policy_dir / filename
             snapshots['rl/'+filename] = {'path':str(path), 'text':path.read_text()}
@@ -126,6 +127,11 @@ def _recorded_start(context, actions, controller='position'):
 
 
 def _check_rl(context):
+    source = LaunchConfiguration('state_source').perform(context)
+    if source not in ('gt', 'measured'):
+        raise RuntimeError('state_source must be gt or measured')
+    if source == 'measured' and LaunchConfiguration('vio').perform(context).lower() not in ('true', '1'):
+        raise RuntimeError('state_source:=measured requires vio:=true')
     if LaunchConfiguration('map').perform(context) != 'a2rl_monorace':
         raise RuntimeError('Bundled A2RL policy requires map:=a2rl_monorace in both sim and bringup')
     if (float(LaunchConfiguration('time_scale').perform(context)) != 1.0
@@ -163,7 +169,8 @@ def generate_launch_description(controller='position'):
              name='a2rl_rl_controller' if controller == 'a2rl' else 'px4_position_controller',
              parameters=[os.path.join(control_share, 'config',
                                       'a2rl_rl.yaml' if controller == 'a2rl' else 'controller.yaml'),
-                         {**({'laps': LaunchConfiguration('laps')} if controller == 'a2rl' else {}),
+                         {**({'laps': LaunchConfiguration('laps'),
+                              'state_source': LaunchConfiguration('state_source')} if controller == 'a2rl' else {}),
                           'time_scale': ParameterValue(LaunchConfiguration('time_scale'), value_type=float),
                           'land_after': LaunchConfiguration('land_after'),
                           'origin_mode': LaunchConfiguration('origin_mode'),
@@ -202,6 +209,9 @@ def generate_launch_description(controller='position'):
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        *([DeclareLaunchArgument('state_source', default_value='gt',
+              description='RL input: gt or measured (OpenVINS position + PX4 velocity/attitude/rates)')]
+          if controller == 'a2rl' else []),
         DeclareLaunchArgument('laps', default_value='1' if controller == 'a2rl' else '2'),
         DeclareLaunchArgument('time_scale', default_value='1.0'),
         DeclareLaunchArgument('land_after', default_value='true'),
