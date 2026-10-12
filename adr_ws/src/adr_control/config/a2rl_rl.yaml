@@ -1,0 +1,17 @@
+a2rl_rl_controller:
+  ros__parameters:
+    rate_hz: 50.0
+    warmup_count: 100
+    auto_arm: true
+    # All network state comes from Gazebo, never /adr/odom or VIO.
+    gt_topic: /adr/ground_truth/odom
+    gt_timeout: 0.10
+    control_gap_timeout: 0.10
+    takeoff_timeout: 30.0
+    pos_tol: 0.25
+    vel_tol: 0.3
+    # This is the trained policy feature (40–50 deg), not the rendered camera.
+    camera_uptilt_deg: 45.0
+    max_flight_time: 180.0
+    gate_timeout: 20.0
+    hold_time: 3.0

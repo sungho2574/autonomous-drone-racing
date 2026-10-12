@@ -9,6 +9,9 @@
 | 위치 추정         | motion capture                  | motion capture       | OpenVINS + gate map PnP |
 | 경로 계획 및 제어 | min-snap + PX4 Position Control | RL + rate controller | RL + rate controller    |
 
+A2RL 맵과 전달받은 ONNX 정책을 GT로 실행하려면 [A2RL RL 실행 문서](docs/a2rl_rl.md)를 참고한다.
+`sim.launch.py map:=a2rl_monorace`를 먼저 띄운 뒤 `a2rl_rl.launch.py laps:=1`을 실행한다.
+
 ## 구성
 
 ```

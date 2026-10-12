@@ -39,6 +39,7 @@ def _stale_patterns():
     return [
         (r'adr_planning/gate_planner', 'gate_planner'),
         (r'adr_control/px4_position_controller', 'px4_position_controller'),
+        (r'adr_control/a2rl_rl_controller', 'a2rl_rl_controller'),
         (r'adr_perception/gate_detector', 'gate_detector'),
         (r'adr_perception/gate_pnp', 'gate_pnp'),
         (r'adr_state_estimation/drift_corrector', 'drift_corrector'),
@@ -74,7 +75,7 @@ def _await_recording(context, actions, folder, started):
             kwargs=dict(actions=actions,folder=folder,started=started))])]
 
 
-def _recorded_start(context, actions):
+def _recorded_start(context, actions, controller='position'):
     def arg(name): return LaunchConfiguration(name).perform(context)
     if arg('record').lower() not in ('true','1'):
         return actions
@@ -87,7 +88,18 @@ def _recorded_start(context, actions):
     root=Path(root_arg).expanduser() if root_arg else repo/'flight_logs'
     params={k:arg(k) for k in ('map','laps','time_scale','land_after','perception','pnp',
             'origin_mode','vio','vio_profile','vio_timing_path','heading_mode','v_avg','a_max','use_sim_time')}
+    params['controller'] = controller
     snapshots={}
+    if controller == 'a2rl':
+        import hashlib
+        policy_dir = Path(get_package_share_directory('adr_control')) / 'policies/a2rl_monorace'
+        params['policy_sha256'] = hashlib.sha256((policy_dir/'policy.onnx').read_bytes()).hexdigest()
+        params['rl_state_source'] = '/adr/ground_truth/odom'
+        for filename in ('policy_meta.json', 'config_asrun.yaml'):
+            path = policy_dir / filename
+            snapshots['rl/'+filename] = {'path':str(path), 'text':path.read_text()}
+        path = Path(get_package_share_directory('adr_control')) / 'config/a2rl_rl.yaml'
+        snapshots['rl/controller'] = {'path':str(path), 'text':path.read_text()}
     sources={'map':bringup/'config/maps'/f"{arg('map')}.yaml",'planner':bringup/'config/planner.yaml'}
     for pkg,files in {'adr_vio':['estimator_config.yaml','kalibr_imucam_chain.yaml','kalibr_imu_chain.yaml'],
                       'adr_control':['controller.yaml'],'adr_perception':['gate_detector.yaml','gate_pnp.yaml'],
@@ -113,7 +125,20 @@ def _recorded_start(context, actions):
                  kwargs=dict(actions=actions,folder=str(folder),started=time.monotonic()))])]
 
 
-def generate_launch_description():
+def _check_rl(context):
+    if LaunchConfiguration('map').perform(context) != 'a2rl_monorace':
+        raise RuntimeError('Bundled A2RL policy requires map:=a2rl_monorace in both sim and bringup')
+    if (float(LaunchConfiguration('time_scale').perform(context)) != 1.0
+            or LaunchConfiguration('use_sim_time').perform(context).lower() != 'true'):
+        raise RuntimeError('A2RL requires time_scale:=1.0 and use_sim_time:=true')
+    try:
+        import onnxruntime  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError('Install RL runtime: python3 -m pip install --user onnxruntime==1.23.2') from exc
+    return []
+
+
+def generate_launch_description(controller='position'):
     bringup_share = get_package_share_directory('adr_bringup')
     # map:= → config/maps/<맵>.yaml. PathJoinSubstitution 은 Substitution 하나로 평가되므로
     # 파라미터가 문자열 배열로 잘못 해석될 여지가 없다.
@@ -133,9 +158,13 @@ def generate_launch_description():
                           'gates_file': gates_file,
                           **sim_time}],
              output='screen'),
-        Node(package='adr_control', executable='px4_position_controller', name='px4_position_controller',
-             parameters=[os.path.join(control_share, 'config', 'controller.yaml'),
-                         {'time_scale': ParameterValue(LaunchConfiguration('time_scale'), value_type=float),
+        Node(package='adr_control',
+             executable='a2rl_rl_controller' if controller == 'a2rl' else 'px4_position_controller',
+             name='a2rl_rl_controller' if controller == 'a2rl' else 'px4_position_controller',
+             parameters=[os.path.join(control_share, 'config',
+                                      'a2rl_rl.yaml' if controller == 'a2rl' else 'controller.yaml'),
+                         {**({'laps': LaunchConfiguration('laps')} if controller == 'a2rl' else {}),
+                          'time_scale': ParameterValue(LaunchConfiguration('time_scale'), value_type=float),
                           'land_after': LaunchConfiguration('land_after'),
                           'origin_mode': LaunchConfiguration('origin_mode'),
                           # origin_mode=start 일 때 start 좌표를 여기서 읽는다 — planner 와 같은 맵이어야 한다
@@ -173,7 +202,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        DeclareLaunchArgument('laps', default_value='2'),
+        DeclareLaunchArgument('laps', default_value='1' if controller == 'a2rl' else '2'),
         DeclareLaunchArgument('time_scale', default_value='1.0'),
         DeclareLaunchArgument('land_after', default_value='true'),
         DeclareLaunchArgument('perception', default_value='true'),
@@ -189,7 +218,7 @@ def generate_launch_description():
         DeclareLaunchArgument('record_root', default_value=''),
         DeclareLaunchArgument('vio_timing_path', default_value=''),
         # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
-        DeclareLaunchArgument('map', default_value='cross'),
+        DeclareLaunchArgument('map', default_value='a2rl_monorace' if controller == 'a2rl' else 'cross'),
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
         DeclareLaunchArgument('v_avg', default_value='3.0'),
         DeclareLaunchArgument('a_max', default_value='8.0'),
@@ -198,7 +227,8 @@ def generate_launch_description():
         # ---- 이전 실행 잔재 정리. 반드시 우리 노드를 띄우기 전에! ----
         # 고아 노드가 남으면 latched 토픽(/adr/trajectory, /adr/planned_path)의 퍼블리셔가 둘이 되어
         # rviz·컨트롤러가 낡은 샘플을 물고, 경로가 '떴다 안 떴다' 한다.
+        *([OpaqueFunction(function=_check_rl)] if controller == 'a2rl' else []),
         OpaqueFunction(function=_cleanup),
 
-        OpaqueFunction(function=_recorded_start, kwargs={'actions': pipeline}),
+        OpaqueFunction(function=_recorded_start, kwargs={'actions': pipeline, 'controller': controller}),
     ])

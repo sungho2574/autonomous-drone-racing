@@ -14,14 +14,18 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
+        (os.path.join('share', package_name, 'policies', 'a2rl_monorace'),
+         glob('policies/a2rl_monorace/*')),
     ],
     install_requires=['setuptools'],
+    extras_require={'rl': ['onnxruntime==1.23.2', 'numpy<2', 'PyYAML']},
     zip_safe=True,
     description='PX4 offboard 제어. step1: TrajectorySetpoint 기반 position control',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'a2rl_rl_controller = adr_control.a2rl_rl_controller:main',
             'px4_position_controller = adr_control.px4_position_controller:main',
         ],
     },
