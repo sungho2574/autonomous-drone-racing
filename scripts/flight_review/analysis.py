@@ -375,7 +375,8 @@ def topview_figure(data, destination):
     from matplotlib.figure import Figure
     from matplotlib.lines import Line2D
 
-    fig = Figure(figsize=(10, 10), layout="constrained", facecolor="white")
+    fig = Figure(figsize=(14, 6), facecolor="white")
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.90, bottom=0.23)
     ax = fig.subplots()
     gt = data.get("ground_truth", [])
     actual = gt or data["poses"].get("actual", [])
@@ -393,13 +394,13 @@ def topview_figure(data, destination):
         # Never connect separate recording intervals across long time gaps.
         cuts = np.flatnonzero(np.diff(points[:, 0]) > 0.3) + 1
         for i, part in enumerate(np.split(points, cuts)):
-            ax.plot(part[:, 1], part[:, 2], color=color, lw=1.3, alpha=0.85,
+            ax.plot(part[:, 2], part[:, 1], color=color, lw=1.3, alpha=0.85,
                     label=label if i == 0 else None,
                     marker="." if len(part) == 1 else None)
     pnp = data.get("pnp", [])
     if pnp:
         points = np.asarray(pnp)
-        ax.scatter(points[:, 1], points[:, 2], marker="x", s=19, linewidths=0.8,
+        ax.scatter(points[:, 2], points[:, 1], marker="x", s=19, linewidths=0.8,
                    color="#008577", alpha=0.65, label=f"PnP position ({len(pnp)})", zorder=4)
     else:
         missing.append("PnP position")
@@ -416,24 +417,24 @@ def topview_figure(data, destination):
             normal = np.array([math.cos(yaw), math.sin(yaw)])
             tangent = np.array([-normal[1], normal[0]])
             ends = np.array([x, y]) + np.array([[-0.5], [0.5]]) * width * tangent
-            ax.plot(ends[:, 0], ends[:, 1], color="#e58c25", lw=4, zorder=5)
-            ax.annotate("", xy=np.array([x, y]) + normal * width * 0.65,
-                        xytext=(x, y), arrowprops=dict(arrowstyle="->", color="#b76913"), zorder=5)
+            ax.plot(ends[:, 1], ends[:, 0], color="#e58c25", lw=4, zorder=5)
+            ax.annotate("", xy=(np.array([x, y]) + normal * width * 0.65)[::-1],
+                        xytext=(y, x), arrowprops=dict(arrowstyle="->", color="#b76913"), zorder=5)
         label = " / ".join(f"G{g['id']} (z={g['z']:g})" for g in gates)
-        ax.annotate(label, (x, y), xytext=(6, 7), textcoords="offset points",
+        ax.annotate(label, (y, x), xytext=(6, 7), textcoords="offset points",
                     fontsize=8, zorder=6, bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=1))
     start = course.get("start")
     if start:
-        ax.scatter([start["x"]], [start["y"]], marker="*", s=110,
+        ax.scatter([start["y"]], [start["x"]], marker="*", s=110,
                    color="#333333", label="Map start", zorder=6)
     handles, labels = ax.get_legend_handles_labels()
     if groups:
         handles.append(Line2D([], [], color="#e58c25", lw=4))
         labels.append("Gate / arrow: passage direction")
     if handles:
-        fig.legend(handles, labels, loc="outside lower center", ncol=2, fontsize=9)
+        fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.01), ncol=3, fontsize=9)
     ax.set(title=f"{data['meta'].get('track', 'Flight')} — top view (XY)",
-           xlabel="X / East [m]", ylabel="Y / North [m]")
+           xlabel="Y / North [m]", ylabel="X / East [m]")
     ax.set_aspect("equal", adjustable="box")
     ax.margins(0.12)
     ax.grid(True, alpha=0.22)
@@ -445,8 +446,10 @@ def topview_figure(data, destination):
         lo, hi = bounds.min(axis=0), bounds.max(axis=0)
         padding = max(float(np.max(hi - lo)) * 0.12, width * 2)
         lo, hi = lo - padding, hi + padding
-        ax.set_xlim(lo[0], hi[0])
-        ax.set_ylim(lo[1], hi[1])
+        ax.set_xlim(lo[1], hi[1])
+        ax.set_ylim(lo[0], hi[0])
+    # Clockwise quarter turn: North points right, East points down.
+    ax.invert_yaxis()
     if missing:
         ax.text(0.01, 0.01, "No data: " + ", ".join(missing), transform=ax.transAxes,
                 fontsize=8, color="#555555", wrap=True)

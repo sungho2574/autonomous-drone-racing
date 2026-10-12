@@ -184,7 +184,8 @@ PnP 보정 VIO는 actual과 비교하고, actual과 plan의 차이는 추종 오
 ### Matplotlib 탑뷰
 
 기록을 선택하면 게이트 배치, 실제 위치(GT 우선, 없으면 PX4 odometry로 명시),
-Raw VIO, PnP 보정 VIO, PnP 위치(×)를 XY 등비율 PNG로 표시합니다.
+Raw VIO, PnP 보정 VIO, PnP 위치(×)를 가로형 등비율 PNG로 표시합니다.
+가로축은 Y(North), 세로축은 X(East, 아래쪽 증가)로, A2RL 출발 방향이 왼쪽에서 오른쪽입니다.
 게이트 배치와 시작점 범위에 여유를 두며, 멀리 발산한 데이터는 화면 밖으로 잘라 표시합니다.
 원본 로그는 변경하지 않습니다. 5·6번처럼 XY가 같은 게이트는 ID와 높이를 함께 표시합니다.
 이미지 복사/PNG 저장을 지원하며 파일은 각 기록의 `review/topview.png`에 생성됩니다.

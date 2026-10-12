@@ -136,8 +136,10 @@ def test_topview_sources_and_pnp(tmp_path, monkeypatch, include_gt):
     assert ('Ground truth' in labels) == include_gt
     assert ('PX4 odometry (GT unavailable)' in labels) == (not include_gt)
     assert 'Raw VIO (map aligned)' in labels and 'PnP-corrected VIO' in labels
-    np.testing.assert_allclose(ax.collections[0].get_offsets(), [[1, 2]])
+    np.testing.assert_allclose(ax.collections[0].get_offsets(), [[2, 1]])
     assert ax.get_aspect() == 1.0
+    assert ax.yaxis_inverted()
+    assert ax.get_xlabel() == "Y / North [m]"
 
 
 def test_topview_clips_divergence_to_gate_area(tmp_path, monkeypatch):
