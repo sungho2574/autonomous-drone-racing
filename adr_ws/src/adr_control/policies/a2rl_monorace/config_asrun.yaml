@@ -1,3 +1,4 @@
+# Handoff training settings with map positions translated to centered ENU.
 sim:
   device: cpu
   policy_device: cuda:0
@@ -21,8 +22,8 @@ track:
   z_min: 0.0
   z_max: 8.0
   extra_xy:
-  - - -18.0
-    - 92.0
+  - - -2.0909090909090917
+    - 45.54545454545455
   loop: true
 action:
   a_max_g: 4.0
@@ -78,8 +79,8 @@ init:
     samples: 4000
     extra:
     - after_gate: 5
-      x: -18.0
-      y: 92.0
+      x: -2.0909090909090917
+      y: 45.54545454545455
       z: 3.2
   gate_plane_clear: 0.3
   pos_noise: 0.5

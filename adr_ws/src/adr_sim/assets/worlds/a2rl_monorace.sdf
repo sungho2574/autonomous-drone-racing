@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 자동 생성: adr_sim/scripts/gen_world.py (입력: adr_bringup/config/maps/a2rl_monorace.yaml). 직접 수정하지 말 것. -->
+<!-- Gate-mean-centered ENU: translated together with a2rl_monorace.yaml. -->
 <sdf version="1.9">
   <world name="a2rl_monorace">
     <!-- PX4 standalone 모드용 시스템 플러그인 (PX4 gz_bridge/server.config 와 동일 구성) -->
@@ -71,60 +72,60 @@
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_1</name>
-      <pose>-25 14 1.4 0 0 2.181662</pose>
+      <pose>-9.09090909091 -32.4545454545 1.4 0 0 2.181662</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_2</name>
-      <pose>-19 30 1.4 0 0 1.308997</pose>
+      <pose>-3.09090909091 -16.4545454545 1.4 0 0 1.308997</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_3</name>
-      <pose>-22 46 1.4 0 0 1.745329</pose>
+      <pose>-6.09090909091 -0.454545454545 1.4 0 0 1.745329</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_4</name>
-      <pose>-20 63 1.4 0 0 1.570796</pose>
+      <pose>-4.09090909091 16.5454545455 1.4 0 0 1.570796</pose>
     </include>
     <!-- 패널 t4: 게이트 [5, 6] 가 한 판을 공유한다 (구멍 2개) -->
     <include>
       <uri>model://adr_panel_t4_a2rl_monorace</uri>
       <name>panel_t4</name>
-      <pose>-18 85 0 0 0 1.570796</pose>
+      <pose>-2.09090909091 38.5454545455 0 0 0 1.570796</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_7</name>
-      <pose>-13 68 1.4 0 0 4.974188</pose>
+      <pose>2.90909090909 21.5454545455 1.4 0 0 4.974188</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_8</name>
-      <pose>-7 55 1.4 0 0 4.712389</pose>
+      <pose>8.90909090909 8.54545454545 1.4 0 0 4.712389</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_9</name>
-      <pose>-12 37 1.4 0 0 4.712389</pose>
+      <pose>3.90909090909 -9.45454545455 1.4 0 0 4.712389</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_10</name>
-      <pose>-7 19 1.4 0 0 4.712389</pose>
+      <pose>8.90909090909 -27.4545454545 1.4 0 0 4.712389</pose>
     </include>
     <include>
       <uri>model://adr_gate_a2rl_monorace</uri>
       <name>gate_11</name>
-      <pose>-14 9 1.4 0 0 3.141593</pose>
+      <pose>1.90909090909 -37.4545454545 1.4 0 0 3.141593</pose>
     </include>
 
     <!-- ===== 드론 (start 지점 바닥, PX4 는 PX4_GZ_MODEL_NAME=adr_racer 로 붙는다) ===== -->
     <include>
       <uri>model://adr_racer</uri>
       <name>adr_racer</name>
-      <pose>-22.0 8.0 0.05 0 0 0</pose>
+      <pose>-6.09090909091 -38.4545454545 0.05 0 0 0</pose>
     </include>
   </world>
 </sdf>

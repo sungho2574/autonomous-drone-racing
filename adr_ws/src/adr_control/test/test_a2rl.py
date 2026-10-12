@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleStatus
 import rclpy
@@ -15,6 +16,7 @@ from adr_control.a2rl_rl_controller import A2RLController
 ROOT = Path(__file__).parents[2]
 ASSETS = ROOT / 'adr_control/policies/a2rl_monorace'
 MAP = ROOT / 'adr_bringup/config/maps/a2rl_monorace.yaml'
+SHIFT = np.array(yaml.safe_load(MAP.read_text())['course']['translation_from_training_enu'])
 
 
 def test_gt_twist_rotation_and_invalid_quaternion():
@@ -35,6 +37,8 @@ def test_handoff_reference_inference():
     ref = json.loads((Path(__file__).parent / 'data/a2rl_reference_step.json').read_text())
     mp = load_map_from_config(ASSETS / 'config_asrun.yaml', MAP)
     runner = PolicyRunner(ASSETS / 'policy.onnx', mp)
+    # Keep the handoff reference in its original frame; translate position only.
+    ref['x'] = np.array(ref['x']) + SHIFT
     runner.reset(ref['x'], ref['gate_idx'])
     runner.uptilt = ref['uptilt']
     out = runner.step(dict(pos=ref['x'], vel=ref['v'], quat=ref['q'], rates=ref['w']))
@@ -44,19 +48,20 @@ def test_handoff_reference_inference():
     np.testing.assert_allclose([out['roll_rate'], out['pitch_rate'], out['yaw_rate']],
                                out['rates_flu'] * [1, -1, -1])
     assert not mp.virtual_mask.any()
-    np.testing.assert_allclose(mp.bounds_hi, [-4, 95, 8])
+    np.testing.assert_allclose(mp.bounds_hi, np.array([-4, 95, 8]) + SHIFT)
+    np.testing.assert_allclose(mp.gate_pos[:, :2].mean(axis=0), [0, 0], atol=1e-12)
 
 
 def test_shared_panel_holes_and_solid_middle():
     mp = load_map_from_config(ASSETS / 'config_asrun.yaml', MAP)
     tracker = PolicyRunner(ASSETS / 'policy.onnx', mp).tracker
     for z in (1.4, 5.0):
-        assert not tracker.frame_hit(np.array([-18, 84, z]), np.array([-18, 86, z]))
-    assert tracker.frame_hit(np.array([-18, 84, 3.2]), np.array([-18, 86, 3.2]))
+        assert not tracker.frame_hit((np.array([-18, 84, z]) + SHIFT), (np.array([-18, 86, z]) + SHIFT))
+    assert tracker.frame_hit((np.array([-18, 84, 3.2]) + SHIFT), (np.array([-18, 86, 3.2]) + SHIFT))
     tracker.reset(4)
-    ev = tracker.update(np.array([-18, 84, 5.0]), np.array([-18, 86, 5.0]))
+    ev = tracker.update((np.array([-18, 84, 5.0]) + SHIFT), (np.array([-18, 86, 5.0]) + SHIFT))
     assert ev['passed'] and ev['gate_id'] == 6
-    ev = tracker.update(np.array([-18, 86, 1.4]), np.array([-18, 84, 1.4]))
+    ev = tracker.update((np.array([-18, 86, 1.4]) + SHIFT), (np.array([-18, 84, 1.4]) + SHIFT))
     assert ev['passed'] and ev['gate_id'] == 7
 
 
