@@ -90,6 +90,9 @@ def _nodes(context, *args, **kwargs):
     config = LaunchConfiguration('config').perform(context)
     if not os.path.exists(config):
         raise RuntimeError(f'estimator_config.yaml 없음: {config}')
+    if arg('camera_tilt_deg'):
+        from adr_vio.camera_config import vio_config
+        config = str(vio_config(config, arg('camera_tilt_deg')))
     with open(config) as f:
         config_values=yaml.safe_load('\n'.join(line for line in f if not line.startswith('%YAML')))
     capacity=overrides.get('max_slam',config_values.get('max_slam',0))
@@ -123,6 +126,7 @@ def _nodes(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument('camera_tilt_deg', default_value='', description='Sim camera tilt override; empty preserves calibration'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('world', default_value='cross'),
         DeclareLaunchArgument('imu_bridge', default_value='true'),

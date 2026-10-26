@@ -1,0 +1,17 @@
+[0;93m2026-10-26 00:01:05.728494658 [W:onnxruntime:Default, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"[m
+# 폐루프 검증 — 번들 코드 + RotorPy 물리, start 호버 출발
+
+- 맵 `a2rl_monorace.yaml`  게이트 11 개 ids=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+- 정책 `policies/A_slow/policy.onnx` (onnxruntime), 업틸트 45° 고정
+- 기체 64 대, 공칭 질량 0.80 kg, DR off, 제어 50 Hz, 물리 10 ms × 2
+- 완주 기준 2 랩 = 게이트 22 회 통과, 타임아웃 150 s (4233 정책 스텝 소요)
+
+- **평균 게이트 통과 22.00 / 22** (최소 22 / 최대 22)
+- **완주율 100.0%** (64/64)
+- **랩타임 42.33 s** (최소 42.33 / 최대 42.33)
+- 평균 속력 4.43 m/s, 최고 순간 속력 8.63 m/s, 평균 비행 84.66 s
+- 종료 사유: 없음 (전부 완주)
+
+- 통과한 게이트 id 히스토그램: 1:128, 2:128, 3:128, 4:128, 5:128, 6:128, 7:128, 8:128, 9:128, 10:128, 11:128
+- DR off 라 64 대가 같은 궤적을 난다 (출발·질량·정책이 모두 같다) — 최소/최대가 같은 게 정상이다. 기체별 분산은 학습 쪽 DR on 평가표를 봐라.
+- 소요 166 s

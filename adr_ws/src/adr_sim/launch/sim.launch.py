@@ -59,6 +59,15 @@ BRINGUP_SHARE = Path(get_package_share_directory('adr_bringup'))
 MAPS = BRINGUP_SHARE / 'config' / 'maps'
 
 
+def _camera_model(context):
+    from adr_vio.camera_config import camera_model
+    folder = camera_model(ASSETS / 'models' / MODEL_NAME,
+                          LaunchConfiguration('camera_tilt_deg').perform(context))
+    existing = context.environment.get('GZ_SIM_RESOURCE_PATH', '')
+    return [SetEnvironmentVariable('GZ_SIM_RESOURCE_PATH', str(folder) + os.pathsep + existing),
+            LogInfo(msg=f'[camera] temporary model: {folder}')]
+
+
 def _gen_world_cmd(name: str) -> str:
     return f'python3 <워크스페이스>/src/adr_sim/scripts/gen_world.py --map {name}   (전부: --all)'
 
@@ -191,6 +200,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('map', default_value='cross'),
+        DeclareLaunchArgument('camera_tilt_deg', default_value='20.0'),
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value='true'),
         DeclareLaunchArgument('ev', default_value='true'),
@@ -206,6 +216,7 @@ def generate_launch_description():
 
         # ---- 환경: 모델 검색 경로, 소프트웨어 GL ----
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', str(ASSETS / 'models')),
+        OpaqueFunction(function=_camera_model),
         # GPU 모드에서는 부모 셸의 소프트웨어 렌더링 강제 설정도 제거한다.
         UnsetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE',
                                  condition=IfCondition(PythonExpression(["'", soft_gl, "' == '0'"]))),

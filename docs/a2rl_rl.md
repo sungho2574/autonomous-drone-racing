@@ -1,4 +1,89 @@
-# A2RL GT 강화학습 제어
+# A2RL v5 정책 실행 (2026-10-26)
+
+`handoff_a2rl_v5`의 A_slow / B_fast ONNX를 추가했다. 기존 2026-10-12 정책은
+`policy:=a2rl_monorace`로 유지한다. 영상·TorchScript는 실행에 필요하지 않아 복사하지 않았다.
+모든 실행 자산은 저장소 안에 있어 Downloads 폴더 없이 실행할 수 있다.
+
+| policy | 기본 맵 | 전달받은 랩타임 / 평균 속도 |
+|---|---|---|
+| A_slow (기본) | a2rl_monorace_v5 | 42.2 s / 4.4 m/s |
+| B_fast | a2rl_monorace_v5 | 25.0 s / 7.0 m/s |
+| a2rl_monorace | a2rl_monorace | 기존 M17 정책 |
+
+위 성능 수치는 제공자가 학습 환경에서 측정한 값이며 ROS/PX4 통합 완주 결과가 아니다.
+이 저장소의 기존 맵은 G4/G5 높이 및 공유 패널이 v5와 달라 원본을 덮어쓰지 않고
+v5 맵을 별도로 추가했다. v5는 일반 게이트 11장, G5/G6 일반 프레임 적층,
+높이 상한 8 m이며 특수 패널이 없다. 게이트·시작점·경계 추가점은 전달본의 ENU 좌표를 그대로 사용한다.
+원점 이동은 하지 않는다. 시작점은 `(-22, 8, 1.4)`, 학습 경계는
+`[-28, 5, 0]` ~ `[-4, 97.8, 8]`이다. Gazebo 월드와 정책 설정도 전달본 원본을 사용한다.
+번들 map YAML의 오래된 높이 상한 5.90 대신 v5 track 정의/as-run 설정의 8 m를 반영한다.
+
+## 빌드와 실행
+
+```bash
+cd ~/autonomous-drone-racing/adr_ws
+source /opt/ros/humble/setup.bash
+python3 -m pip install --user 'onnxruntime==1.23.2' 'numpy<2'
+colcon build --symlink-install --packages-select adr_control adr_bringup adr_sim adr_vio
+source install/setup.bash
+```
+
+터미널 1:
+
+```bash
+ros2 launch adr_sim sim.launch.py map:=a2rl_monorace_v5 camera_tilt_deg:=20
+```
+
+터미널 2 (A, OpenVINS+PnP 위치를 사용):
+
+```bash
+ros2 launch adr_bringup a2rl_rl.launch.py policy:=A_slow state_source:=measured laps:=1 camera_tilt_deg:=20
+```
+
+A가 안정된 뒤 **종료/착륙 후** 다음 실행에서 `policy:=B_fast`로 바꾼다.
+비행 중 hot-swap은 하지 않는다. A/B는 같은 맵과 런타임·50 Hz 관측/액션 규격을 쓴다.
+기존 정책 실행은 `policy:=a2rl_monorace state_source:=gt`와 sim `map:=a2rl_monorace`를 사용한다.
+
+`state_source:=measured`가 RL launch 기본이다. 위치는
+`rl_position_topic:=/adr/state/corrected` (OpenVINS + PnP), 속도·자세·각속도는 기존처럼
+PX4 측정 경로를 사용한다. Raw VIO 비교는 `rl_position_topic:=/adr/vio/odom`.
+GT 확인은 `state_source:=gt`로 명시한다. measured는 `vio:=true`가 필요하다.
+관측 지연·잡음 없는 학습이므로 재생 검증 통과가 실제 VIO 제어 안정성을 보장하지 않는다.
+기존 상태 freshness/제어 간격 제한과 착륙 전환을 유지한다.
+
+## 실행 시 물리 카메라 각도
+
+**두 터미널에 동일한** `camera_tilt_deg:=30` 등을 지정한다. 기본값 20°이며,
+각도 변경은 시뮬레이터를 다시 시작할 때 반영된다. 범위는 -80°~80°.
+
+- sim: 설치된 모델을 임시 디렉터리에 복사하여 camera_link pitch만 변경한다.
+- bringup: PnP `cam_tilt_deg`, heading planner `heading_camera_tilt_deg`에 전달한다.
+- VIO: 실행별 임시 calibration/estimator 파일을 만들어 같은 optical→IMU 변환을 적용한다.
+- 정책 관측 `camera_uptilt_deg=45`는 물리 각도와 독립이며 그대로 유지한다.
+- 원본 모델/보정 YAML은 수정하지 않는다. 비행 메타데이터에는 선택 정책·해시·학습 설정,
+  위치 입력 토픽·물리 각도·정책 입력 45°·실효 PnP/VIO calibration을 기록한다.
+
+직접 `adr_vio vio.launch.py`를 실행하면 `camera_tilt_deg` 기본은 빈 값으로 기존 calibration을
+보존한다. 이 각도 옵션은 현재 SITL 기체의 mounting을 위한 것이다. 실기체 Kalibr 보정을
+임의의 시뮬레이션 회전으로 대체하지 말 것.
+
+## 오프라인 검증
+
+저장소 루트에서 ROS 없이 실행할 수 있다:
+
+```bash
+PYTHONPATH=adr_ws/src/adr_control python3 -m adr_control.a2rl_runtime.verify \
+  --policy adr_ws/src/adr_control/policies/A_slow \
+  --map adr_ws/src/adr_bringup/config/maps/a2rl_monorace_v5.yaml
+```
+
+B는 경로를 `policies/B_fast`로 바꾼다. 전달본 좌표 그대로,
+21차원 관측·액션·추력·각속도·목표 게이트를 학습 기록과 비교한다.
+A/B 각각 1,280개 샘플 통과, 목표 게이트 불일치 0. 아래는 이전 정책의 도입 기록이다.
+
+---
+
+# 이전 정책 도입 기록 (2026-10-12)
 
 `handoff_sungho_a2rl_20261012`의 A2RL MonoRace 맵과 M17 30M ONNX 정책을 사용한다.
 학습/영상/체크포인트 전체를 가져오지 않고 맵, ONNX, 메타데이터, 설정, 최소 numpy 런타임,

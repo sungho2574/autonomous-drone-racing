@@ -1,0 +1,137 @@
+sim:
+  device: cpu
+  policy_device: cuda:0
+  integrator: rk4
+  aero: true
+  policy_hz: 50.0
+  physics_dt: 0.01
+  substeps: 2
+  episode_sec: 20.0
+  dtype_policy: float32
+airframe:
+  spec_yaml: adr/adr_ws/src/adr_sim/config/racer_spec.yaml
+  k_w: 30.0
+  frame_drag: 0.01
+  mass_nominal: 0.8
+track:
+  map_yaml: maps/a2rl_monorace.yaml
+  virtual_gate_ids: []
+  inflate: 0.134
+  bounds_margin: 3.0
+  z_min: 0.0
+  z_max: 8.0
+  extra_xy:
+  - - -18.0
+    - 92.0
+  - - -20.3
+    - 94.8
+  loop: true
+action:
+  a_max_g: 4.0
+  max_body_rate:
+  - 10.0
+  - 10.0
+  - 7.0
+reward:
+  terms:
+    r_prog:
+      lambda: 1.0
+      clip: 0.12
+    r_gate:
+      lambda: 10.0
+    p_rate:
+      lambda: 0.005
+    p_offset:
+      lambda: 0.0
+    p_perc:
+      lambda: 0.02
+      theta_max_deg: 60.0
+      camera_uptilt_deg:
+      - 40.0
+      - 50.0
+    p_slip:
+      lambda: 0.02
+      min_speed: 0.5
+    p_delta_u:
+      lambda: 0.05
+      thresh:
+      - 0.05
+      - 0.1
+      - 0.1
+      - 0.1
+    p_u:
+      lambda: 0.05
+      min_ratio: 0.34
+    p_crash:
+      lambda: 10.0
+obs:
+  delay_steps_max: 2
+  delay_enabled: false
+  pos_noise_std: 0.02
+  noise_enabled: false
+init:
+  hover_start_prob: 0.2
+  reference:
+    pre_post: 1.5
+    v_avg: 4.0
+    a_max: 6.0
+    yaw_v_min: 1.5
+    yaw_smooth: 0.15
+    samples: 4000
+    extra:
+    - after_gate: 5
+      x: -18.0
+      y: 92.0
+      z: 3.2
+    turn_v5:
+      enabled: true
+      gate_in: 5
+      gate_out: 6
+      side: -1.0
+      R: 2.3
+      wf: 0.8
+      nw: 6
+      z_profile: smooth
+      brake: 0.03
+      wp_mode: s3
+      mode: pin
+      ts: 1.0
+      pin_a: true
+      nt: 2
+  gate_plane_clear: 0.3
+  pos_noise: 0.5
+  vel_dir_noise_deg: 15.0
+  speed_scale:
+  - 0.6
+  - 1.2
+  att_noise_deg: 10.0
+  body_rate_max: 0.5
+  rotor_at_hover: true
+domain_randomization:
+  enabled: true
+  vectorized: true
+  use_update_vehicle_params: true
+  randomize_inertia: true
+  randomize_drag: true
+  randomize_kw: true
+  kw_range:
+  - 20.0
+  - 50.0
+ppo:
+  policy: MlpPolicy
+  net_arch:
+  - 64
+  - 64
+  learning_rate: 0.0003
+  gamma: 0.999
+  gae_lambda: 0.95
+  clip_range: 0.2
+  n_epochs: 10
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  ent_coef: 0.0
+  log_std_init: -2.0
+  num_envs: 2048
+  n_steps: 64
+  batch_size: 4096
+  torch_threads: 2

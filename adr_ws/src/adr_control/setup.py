@@ -16,7 +16,8 @@ setup(
         (os.path.join('share', package_name, 'config'), glob('config/*')),
         (os.path.join('share', package_name, 'policies', 'a2rl_monorace'),
          glob('policies/a2rl_monorace/*')),
-    ],
+        *[(os.path.join('share', package_name, 'policies', name), glob('policies/' + name + '/*'))
+          for name in ('A_slow', 'B_fast')],
     install_requires=['setuptools'],
     extras_require={'rl': ['onnxruntime==1.23.2', 'numpy<2', 'PyYAML']},
     zip_safe=True,

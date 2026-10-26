@@ -253,3 +253,10 @@ PX4 셸이 필요하면 daemon 으로 떠 있는 PX4 에 클라이언트로 붙�
 `step1.launch.py`는 기본적으로 매 비행을 루트 `flight_logs/`에 기록한다.
 OpenVINS 진단 토픽, 시작 시 설정/맵 메타데이터, 비행 bag와 게이트 통과점 분석을 제공한다.
 다크 테마 Flask/uPlot 뷰어 실행 및 수치 해석: [Flight review](scripts/flight_review/README.md).
+
+### A2RL v5 정책
+
+`a2rl_rl.launch.py policy:=A_slow` (기본) 또는 `policy:=B_fast`로 선택합니다.
+시뮬레이터는 `map:=a2rl_monorace_v5`를 사용합니다. 물리 카메라 틸트는 sim과
+bringup 양쪽에 동일한 `camera_tilt_deg:=20`을 전달합니다. 정책 관측 각도 45°와는
+별개입니다. [빌드·실행·검증 방법](docs/a2rl_rl.md)을 참고하세요.

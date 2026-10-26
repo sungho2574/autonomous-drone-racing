@@ -87,15 +87,17 @@ def _recorded_start(context, actions, controller='position'):
         if not root_arg: raise
     root=Path(root_arg).expanduser() if root_arg else repo/'flight_logs'
     params={k:arg(k) for k in ('map','laps','time_scale','land_after','perception','pnp',
-            'origin_mode','vio','vio_profile','vio_timing_path','heading_mode','v_avg','a_max','use_sim_time')}
+            'origin_mode','vio','vio_profile','vio_timing_path','heading_mode','v_avg','a_max','use_sim_time','camera_tilt_deg')}
     params['controller'] = controller
     snapshots={}
     if controller == 'a2rl':
         import hashlib
-        policy_dir = Path(get_package_share_directory('adr_control')) / 'policies/a2rl_monorace'
+        policy_dir = Path(get_package_share_directory('adr_control')) / 'policies' / arg('policy')
+        params['policy'] = arg('policy')
+        params['policy_uptilt_deg'] = 45.0
         params['policy_sha256'] = hashlib.sha256((policy_dir/'policy.onnx').read_bytes()).hexdigest()
         params['rl_state_source'] = arg('state_source')
-        params['rl_position_topic'] = '/adr/ground_truth/odom' if arg('state_source') == 'gt' else '/adr/vio/odom'
+        params['rl_position_topic'] = '/adr/ground_truth/odom' if arg('state_source') == 'gt' else arg('rl_position_topic')
         for filename in ('policy_meta.json', 'config_asrun.yaml'):
             path = policy_dir / filename
             snapshots['rl/'+filename] = {'path':str(path), 'text':path.read_text()}
@@ -107,6 +109,13 @@ def _recorded_start(context, actions, controller='position'):
                       'adr_state_estimation':['drift_corrector.yaml']}.items():
         for filename in files: sources[pkg+'/'+filename]=Path(get_package_share_directory(pkg))/'config'/filename
     for key,path in sources.items(): snapshots[key]={'path':str(path),'text':path.read_text()}
+    from adr_vio.camera_config import vio_config
+    effective = vio_config(Path(get_package_share_directory('adr_vio')) / 'config/estimator_config.yaml', arg('camera_tilt_deg'))
+    calibrated = effective.parent / 'kalibr_imucam_chain.yaml'
+    snapshots['adr_vio/kalibr_imucam_chain.yaml'] = {'path':str(calibrated), 'text':calibrated.read_text()}
+    pnp_effective = yaml.safe_load(snapshots['adr_perception/gate_pnp.yaml']['text'])
+    pnp_effective['gate_pnp']['ros__parameters']['cam_tilt_deg'] = float(arg('camera_tilt_deg'))
+    snapshots['adr_perception/gate_pnp.yaml']['text'] = yaml.safe_dump(pnp_effective)
     estimator=yaml.safe_load('\n'.join(line for line in snapshots['adr_vio/estimator_config.yaml']['text'].splitlines() if not line.startswith('%YAML')))
     params['effective_vio']={key:estimator.get(key) for key in ('max_clones','max_slam','max_slam_in_update','max_msckf_in_update','num_pts','track_frequency')}
     if arg('vio_profile')=='slam_dense':
@@ -128,14 +137,28 @@ def _recorded_start(context, actions, controller='position'):
                  kwargs=dict(actions=actions,folder=str(folder),started=time.monotonic()))])]
 
 
+def _check_camera(context):
+    from adr_vio.camera_config import tilt_degrees
+    tilt_degrees(LaunchConfiguration('camera_tilt_deg').perform(context))
+    return []
+
+
 def _check_rl(context):
     source = LaunchConfiguration('state_source').perform(context)
     if source not in ('gt', 'measured'):
         raise RuntimeError('state_source must be gt or measured')
     if source == 'measured' and LaunchConfiguration('vio').perform(context).lower() not in ('true', '1'):
         raise RuntimeError('state_source:=measured requires vio:=true')
-    if LaunchConfiguration('map').perform(context) != 'a2rl_monorace':
-        raise RuntimeError('Bundled A2RL policy requires map:=a2rl_monorace in both sim and bringup')
+    policy = LaunchConfiguration('policy').perform(context)
+    if policy not in ('a2rl_monorace', 'A_slow', 'B_fast'):
+        raise RuntimeError('policy must be a2rl_monorace, A_slow or B_fast')
+    policy_dir = Path(get_package_share_directory('adr_control')) / 'policies' / policy
+    for name in ('policy.onnx', 'policy_meta.json', 'config_asrun.yaml'):
+        if not (policy_dir / name).is_file():
+            raise RuntimeError(f'Missing policy asset: {policy_dir / name}; rebuild adr_control')
+    expected_map = 'a2rl_monorace' if policy == 'a2rl_monorace' else 'a2rl_monorace_v5'
+    if LaunchConfiguration('map').perform(context) != expected_map:
+        raise RuntimeError(f'Policy {policy} requires map:={expected_map} in both sim and bringup')
     if (float(LaunchConfiguration('time_scale').perform(context)) != 1.0
             or LaunchConfiguration('use_sim_time').perform(context).lower() != 'true'):
         raise RuntimeError('A2RL requires time_scale:=1.0 and use_sim_time:=true')
@@ -163,6 +186,7 @@ def generate_launch_description(controller='position'):
                           'v_avg': LaunchConfiguration('v_avg'),
                           'a_max': LaunchConfiguration('a_max'),
                           'heading_mode': LaunchConfiguration('heading_mode'),
+                          'heading_camera_tilt_deg': ParameterValue(LaunchConfiguration('camera_tilt_deg'), value_type=float),
                           'gates_file': gates_file,
                           **sim_time}],
              output='screen'),
@@ -172,7 +196,10 @@ def generate_launch_description(controller='position'):
              parameters=[os.path.join(control_share, 'config',
                                       'a2rl_rl.yaml' if controller == 'a2rl' else 'controller.yaml'),
                          {**({'laps': LaunchConfiguration('laps'),
-                              'state_source': LaunchConfiguration('state_source')} if controller == 'a2rl' else {}),
+                              'state_source': LaunchConfiguration('state_source'),
+                              'vio_topic': LaunchConfiguration('rl_position_topic'),
+                              'policy_path': PathJoinSubstitution([control_share, 'policies', LaunchConfiguration('policy'), 'policy.onnx']),
+                              'policy_config': PathJoinSubstitution([control_share, 'policies', LaunchConfiguration('policy'), 'config_asrun.yaml'])} if controller == 'a2rl' else {}),
                           'time_scale': ParameterValue(LaunchConfiguration('time_scale'), value_type=float),
                           'land_after': LaunchConfiguration('land_after'),
                           'origin_mode': LaunchConfiguration('origin_mode'),
@@ -187,7 +214,7 @@ def generate_launch_description(controller='position'):
         # PnP 위치 추정 — 시각화/평가 전용. 제어에는 절대 안 들어간다 (TF pnp_base_link 로만 나감)
         Node(package='adr_perception', executable='gate_pnp', name='gate_pnp',
              parameters=[os.path.join(get_package_share_directory('adr_perception'), 'config', 'gate_pnp.yaml'),
-                         {'gates_file': gates_file},
+                         {'gates_file': gates_file, 'cam_tilt_deg': ParameterValue(LaunchConfiguration('camera_tilt_deg'), value_type=float)},
                          sim_time], condition=IfCondition(LaunchConfiguration('pnp')),
              output='screen'),
         # VIO drift 보정 (논문 §2.4 KF) — VIO + 게이트 PnP → /adr/state/corrected.
@@ -203,6 +230,7 @@ def generate_launch_description(controller='position'):
                 get_package_share_directory('adr_vio'), 'launch', 'vio.launch.py')),
             launch_arguments={'use_sim_time': LaunchConfiguration('use_sim_time'),
                               'world': LaunchConfiguration('map'),
+                              'camera_tilt_deg': LaunchConfiguration('camera_tilt_deg'),
                               'profile': LaunchConfiguration('vio_profile'),
                               'stationary_init': PythonExpression([
                                   "'true' if '", LaunchConfiguration('state_source'),
@@ -213,9 +241,12 @@ def generate_launch_description(controller='position'):
     ]
 
     return LaunchDescription([
+        DeclareLaunchArgument('camera_tilt_deg', default_value='20.0'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        *([DeclareLaunchArgument('state_source', default_value='gt',
-              description='RL input: gt or measured (OpenVINS position + PX4 velocity/attitude/rates)')]
+        *([DeclareLaunchArgument('policy', default_value='A_slow'),
+           DeclareLaunchArgument('rl_position_topic', default_value='/adr/state/corrected'),
+           DeclareLaunchArgument('state_source', default_value='measured',
+              description='RL input: gt or measured (selected VIO/PnP position + PX4 velocity/attitude/rates)')]
           if controller == 'a2rl' else []),
         DeclareLaunchArgument('laps', default_value='1' if controller == 'a2rl' else '2'),
         DeclareLaunchArgument('time_scale', default_value='1.0'),
@@ -233,7 +264,7 @@ def generate_launch_description(controller='position'):
         DeclareLaunchArgument('record_root', default_value=''),
         DeclareLaunchArgument('vio_timing_path', default_value=''),
         # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
-        DeclareLaunchArgument('map', default_value='a2rl_monorace' if controller == 'a2rl' else 'cross'),
+        DeclareLaunchArgument('map', default_value=PythonExpression(["'a2rl_monorace' if '", LaunchConfiguration('policy'), "' == 'a2rl_monorace' else 'a2rl_monorace_v5'"]) if controller == 'a2rl' else 'cross'),
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
         DeclareLaunchArgument('v_avg', default_value='3.0'),
         DeclareLaunchArgument('a_max', default_value='8.0'),
@@ -242,6 +273,7 @@ def generate_launch_description(controller='position'):
         # ---- 이전 실행 잔재 정리. 반드시 우리 노드를 띄우기 전에! ----
         # 고아 노드가 남으면 latched 토픽(/adr/trajectory, /adr/planned_path)의 퍼블리셔가 둘이 되어
         # rviz·컨트롤러가 낡은 샘플을 물고, 경로가 '떴다 안 떴다' 한다.
+        OpaqueFunction(function=_check_camera),
         *([OpaqueFunction(function=_check_rl)] if controller == 'a2rl' else []),
         OpaqueFunction(function=_cleanup),
 

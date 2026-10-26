@@ -1,0 +1,38 @@
+# 동등성 테스트 로그  2026-10-25 23:34:51
+체크포인트 : runs/a2rl_v5_A_30M/ckpt/step_28M.zip
+설정       : runs/a2rl_v5_A_30M/config_asrun.yaml
+맵         : maps/a2rl_monorace.yaml
+관측 정규화: 없음 (VecNormalize 미사용 — vec_adapter.py)
+정책 구조  : {'pi': [64, 64], 'vf': [64, 64]}  obs 21 → act 4, 액션공간 Box(-1.0, 1.0, (4,), float32)
+
+export     : policy.onnx (24727 B), policy.ts (64900 B)
+
+롤아웃     : 16 대 × 80 스텝 = 1280 상태 → rollout_ref.npz (283512 B)
+
+(A) 정책 동등성 — 실제 롤아웃 관측 1000 개
+    SB3 predict vs ONNX action(클립)             최대오차 4.321e-07
+    SB3 predict vs TorchScript action(클립)      최대오차 0.000e+00
+    SB3 predict vs torch 래퍼 action(클립)         최대오차 0.000e+00
+    ONNX vs TorchScript action_raw(클립 전)       최대오차 4.321e-07
+    ONNX vs torch 래퍼 action_raw(클립 전)          최대오차 4.321e-07
+    클립이 실제로 걸린 비율 0.00% (raw 범위 [-0.745, 0.510])
+
+(B) obs_builder vs env._raw_obs — 상태 1280 개 (21 차원 전부), float32 환산 최대오차 0.000e+00
+    차원별 최대오차 0:0.0e+00 1:0.0e+00 2:0.0e+00 3:0.0e+00 4:0.0e+00 5:0.0e+00 6:0.0e+00 7:0.0e+00 8:0.0e+00 9:0.0e+00 10:0.0e+00 11:0.0e+00 12:0.0e+00 13:0.0e+00 14:0.0e+00 15:0.0e+00 16:0.0e+00 17:0.0e+00 18:0.0e+00 19:0.0e+00 20:0.0e+00
+(D) action_mapper vs env._control — 추력 최대오차 0.000e+00 N, 각속도 명령 최대오차 0.000e+00 rad/s
+(C) gate_tracker 목표 게이트 시퀀스 — 1280 스텝 중 불일치 0 (0.000%). 학습은 0.01 s 물리 서브스텝마다 판정하고 런타임은 0.02 s 정책 구간으로 판정한다 — 그 차이만 남는다.
+
+(E) px4_convert vs adr_control/frames.py — 난수 2000 개
+    enu_to_ned(위치·속도)              최대오차 0.000e+00
+    yaw_enu_to_ned                     최대오차 0.000e+00
+    yaw_rate_enu_to_ned                최대오차 0.000e+00
+    quat_enu_flu_to_ned_frd (xyzw 환산) 최대오차 0.000e+00
+    쿼터니언 왕복(ENU→NED→ENU)         최대오차 3.331e-16
+    body_rates FLU→FRD = x축 180° 회전  최대오차 0.000e+00
+    throttle_sitl: 0.75 kg 호버 → 0.3134 (racer_spec px4.thr_hover 0.31), 0.80 kg 호버 → 0.3273
+
+판정: 정책 최대오차 4.321e-07 <= 1e-5 → 통과
+      런타임 관측 최대오차 0.000e+00, 추력 0.000e+00 N, 각속도 0.000e+00 rad/s, 게이트 불일치 0/1280
+      프레임 변환 최대오차 3.331e-16 (frames.py 와 동일 규칙)
+메타       : policy_meta.json
+총 6 s

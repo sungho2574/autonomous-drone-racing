@@ -18,7 +18,7 @@ class A2RLController(OffboardBase):
     def __init__(self):
         super().__init__('a2rl_rl_controller')
         assets = Path(get_package_share_directory('adr_control')) / 'policies/a2rl_monorace'
-        defaults = dict(policy_path=str(assets / 'policy.onnx'),
+        defaults = dict(policy_config=str(assets / 'config_asrun.yaml'), policy_path=str(assets / 'policy.onnx'),
                         gt_topic='/adr/ground_truth/odom', camera_uptilt_deg=45.0,
                         state_source='gt', vio_topic='/adr/vio/odom',
                         vio_timeout=0.20, px4_timeout=0.10,
@@ -46,7 +46,7 @@ class A2RLController(OffboardBase):
                 raise ValueError(f'{name} must be finite and positive')
         if not 40 <= self.cfg['camera_uptilt_deg'] <= 50:
             raise ValueError('camera_uptilt_deg must be within trained range 40–50')
-        self.mp = load_map_from_config(assets / 'config_asrun.yaml',
+        self.mp = load_map_from_config(self.cfg['policy_config'],
                                       map_yaml=self.get_parameter('gates_file').value)
         self.runner = PolicyRunner(self.cfg['policy_path'], self.mp,
                                    uptilt_deg=self.cfg['camera_uptilt_deg'])

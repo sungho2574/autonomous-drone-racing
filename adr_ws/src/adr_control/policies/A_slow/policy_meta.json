@@ -1,0 +1,36 @@
+{
+  "ckpt": "runs/a2rl_v5_A_30M/ckpt/step_28M.zip",
+  "config": "runs/a2rl_v5_A_30M/config_asrun.yaml",
+  "map": "maps/a2rl_monorace.yaml",
+  "obs_dim": 21,
+  "act_dim": 4,
+  "obs_normalization": null,
+  "policy_hz": 50.0,
+  "mass_nominal_kg": 0.8,
+  "a_max_g": 4.0,
+  "max_body_rate_rad_s": [
+    10.0,
+    10.0,
+    7.0
+  ],
+  "gate_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "camera_uptilt_deg_train_range": [
+    40.0,
+    50.0
+  ],
+  "thrust_from_action": "mass*(G + (a_max_g-1)*G*clip(a0,0,1) + G*clip(a0,-1,0))",
+  "G": 9.81,
+  "equivalence_max_err": 4.3213367462158203e-07
+}
