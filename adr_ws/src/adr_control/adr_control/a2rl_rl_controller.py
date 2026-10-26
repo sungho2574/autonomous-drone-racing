@@ -267,6 +267,10 @@ class A2RLController(OffboardBase):
                 self.abort(f'gate tracker: {failure}')
                 return
             if finished:
+                if self.cfg['land_after']:
+                    self.land()
+                    self.goto('LAND', 'requested laps completed')
+                    return
                 self.hold_pos = (self.position_world.copy() if self.cfg['state_source'] == 'measured'
                                  else observation['pos'].copy())
                 self.hold_yaw = float(rpy_from_quat(observation['quat'])[2])

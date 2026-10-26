@@ -139,8 +139,17 @@ def test_takeoff_timeout_never_enters_rl(controller):
     assert node.state == 'FAULT_HOLD' and not lands and not sent
 
 
+def test_completed_lap_lands_without_position_return(controller):
+    node, clock, sent, modes, lands = controller
+    node.runner.tracker.laps = node.cfg['laps']
+    node.step(.02)
+    assert node.state == 'LAND' and lands and not sent
+    assert not modes  # No position hold setpoint before handing over to PX4 LAND.
+
+
 def test_completed_lap_switches_to_hold(controller):
     node, clock, sent, modes, lands = controller
+    node.cfg['land_after'] = False
     node.runner.tracker.laps = node.cfg['laps']
     node.step(.02)
     assert node.state == 'HOLD' and not sent and not lands
