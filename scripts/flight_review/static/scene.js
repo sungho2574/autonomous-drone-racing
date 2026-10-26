@@ -153,26 +153,30 @@ export class FlightScene {
   }
   addPnp(rows, controls) {
     this.pnpRows = rows;
-    const vertices = [], h = 0.12;
-    for (const [, x, y, z] of rows)
+    const vertices = [], colors = [], h = 0.12;
+    for (const [, x, y, z, , status] of rows) {
+      const c = new THREE.Color(status === 1 ? "#00a68c" : status === 0 ? "#e62626" : "#888888");
+      for (let i = 0; i < 4; i++) colors.push(c.r, c.g, c.b);
       vertices.push(x-h, y-h, z, x+h, y+h, z,
                     x-h, y+h, z, x+h, y-h, z);
+    }
     const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
     this.pnpMarks = new THREE.LineSegments(
-      geometry, new THREE.LineBasicMaterial({ color: "#36d9ff" }),
+      geometry, new THREE.LineBasicMaterial({ vertexColors: true }),
     );
     this.scene.add(this.pnpMarks);
     const label = document.createElement("label");
     label.className = "series-toggle";
     label.style.setProperty("--series-color", "#36d9ff");
-    label.title = "PnP에서 채택된 위치 전체. 보정 필터 사용 여부와는 별개입니다.";
+    label.title = "보정 필터 판정: 청록=채택, 빨강=기각, 회색=판정 기록 없음.";
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = rows.length > 0;
     input.disabled = !rows.length;
     input.setAttribute("aria-label", "3D PnP measurements");
-    label.append(input, document.createTextNode(`PnP × (${rows.length})`));
+    label.append(input, document.createTextNode(`PnP × (${rows.length}) · 청록 채택 / 빨강 기각 / 회색 미확인`));
     controls.append(label);
     this.pnpMarks.visible = input.checked;
     input.onchange = () => {

@@ -46,6 +46,7 @@ def bag_rows(folder):
         "/ov_msckf/tracking_metrics",
         "/adr/pnp/association",
         "/adr/pnp/gate",
+        "/adr/pnp/decision",
         "/adr/controller_state",
         "/adr/trajectory",
         "/adr/ground_truth/odom",
@@ -89,6 +90,7 @@ def load_flight(folder):
     tracker_metrics = []
     association_metrics = []
     pnp = []
+    decisions = {}
     ground_truth = []
     poses = {k: [] for k in ("actual", "raw", "corrected")}
     states = []
@@ -111,6 +113,9 @@ def load_flight(folder):
                     ground_truth.append(row)
                 else:
                     poses[POSE_TOPICS[topic]].append(row)
+        elif topic == "/adr/pnp/decision":
+            decision = json.loads(msg.data)
+            decisions[round(decision['stamp'], 9), decision['gate_id']] = decision
         elif topic == "/adr/pnp/gate":
             p = msg.pos_w
             row = [stamp(msg.header), p.x, p.y, p.z, int(msg.gate_id)]
@@ -132,6 +137,9 @@ def load_flight(folder):
             states.append((t, msg.data))
         elif topic == "/adr/trajectory" and poly is None:
             poly = msg
+    for row in pnp:
+        decision = decisions.get((round(row[0], 9), row[4]))
+        row.extend([1 if decision['accepted'] else 0, decision['reason']] if decision else [-1, 'unknown'])
     poses = {k: clean_rows(v) for k, v in poses.items()}
     ground_truth = clean_rows(ground_truth)
     metrics = sorted({t: v for t, v in metrics}.items())
@@ -420,10 +428,12 @@ def topview_figure(data, destination):
                     label=label if i == 0 else None,
                     marker="." if len(part) == 1 else None)
     pnp = data.get("pnp", [])
-    if pnp:
-        points = np.asarray(pnp)
-        ax.scatter(points[:, 2], points[:, 1], marker="x", s=19, linewidths=0.8,
-                   color="#008577", alpha=0.65, label=f"PnP position ({len(pnp)})", zorder=4)
+    for status, label, color in ((1, 'accepted', '#00a68c'), (0, 'rejected', '#e62626'), (-1, 'unknown', '#888888')):
+        rows = [r for r in pnp if (r[5] if len(r) > 5 else -1) == status]
+        if rows:
+            points = np.asarray([r[:4] for r in rows], float)
+            ax.scatter(points[:, 2], points[:, 1], s=20, marker='x',
+                       color=color, alpha=.7, label=f'PnP {label} ({len(rows)})', zorder=4)
     else:
         missing.append("PnP position")
 

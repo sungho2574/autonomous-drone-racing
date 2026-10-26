@@ -109,7 +109,7 @@ class GatePnP(Node):
         self.max_marks = int(self.get_parameter('max_marks').value)
         self.mark_size = float(self.get_parameter('mark_size').value)
         self.marks = self._new_marker()
-        self.marks_pub = self.create_publisher(Marker, '/adr/pnp/marks', 10)
+        self.marks_pub = self.create_publisher(Marker, '/adr/pnp/candidate_marks', 10)
         self.gatepnp_pub = self.create_publisher(GatePnPMsg, '/adr/pnp/gate', 10)
         self.pose_pub = self.create_publisher(PoseStamped, '/adr/pnp/pose', 10)
         self.gate_pub = self.create_publisher(Int32, '/adr/pnp/target_gate', 10)

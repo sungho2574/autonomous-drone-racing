@@ -28,7 +28,7 @@ from fixture_bag import make_bag
 
 def test_pnp_measurements_in_scene(tmp_path):
     data = load_flight(make_bag(tmp_path, include_pnp=True))
-    assert scene_data(data)["pnp"] == [[0.25, 1.0, 2.0, 3.0, 2]]
+    assert scene_data(data)["pnp"] == [[0.25, 1.0, 2.0, 3.0, 2, -1, "unknown"]]
     assert "pnp" not in data["poses"]  # Sparse measurements must not become interpolated poses.
 
 
@@ -241,3 +241,21 @@ def test_rl_passages_ignore_planner_timetable(tmp_path):
                for h in hits.values())
     data["plan"] = []
     assert all(len(h["actual"]) == 1 for h in gate_hits(data).values())
+
+
+@pytest.mark.parametrize('accepted', [True, False])
+def test_pnp_filter_decisions_join_by_stamp_and_gate(tmp_path, monkeypatch, accepted):
+    import analysis
+    from rosbags.typesys import Stores, get_typestore
+    folder = make_bag(tmp_path, include_pnp=True)
+    original = analysis.bag_rows
+    store = get_typestore(Stores.ROS2_HUMBLE)
+    typ = 'std_msgs/msg/String'
+    msg = store.types[typ](data=json.dumps(dict(stamp=100.25, gate_id=2,
+                           accepted=accepted, reason='test')))
+    def rows(path):
+        yield from original(path)
+        yield '/adr/pnp/decision', typ, 100.3, store.serialize_cdr(msg, typ)
+    monkeypatch.setattr(analysis, 'bag_rows', rows)
+    data = load_flight(folder)
+    assert scene_data(data)['pnp'][0][5:] == [int(accepted), 'test']

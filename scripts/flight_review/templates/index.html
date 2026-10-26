@@ -92,7 +92,7 @@
             <div id="scene-canvas"></div>
             <div id="pose-status"></div>
             <p class="footnote">
-              구: 위치 · 3축: 기체 자세 (X 빨강 / Y 초록 / Z 파랑)<br />점선:
+              PnP ×: 청록=보정 채택 · 빨강=기각 · 회색=판정 기록 없음<br />구: 위치 · 3축: 기체 자세 (X 빨강 / Y 초록 / Z 파랑)<br />점선:
               지면 z=0 → 위치 · Plan의 자세는 계획 yaw만 표시<br />그래프를
               벗어나면 마지막 호버 시각을 유지합니다.
             </p>
@@ -104,7 +104,7 @@
                 <div class="actions"><button id="copy-topview">이미지 복사</button><a id="download-topview" download="topview.png">PNG 저장 ↗</a></div>
               </div>
               <img id="topview" alt="게이트 배치와 실제 궤적, VIO 추정 궤적, PnP 위치의 matplotlib 탑뷰" />
-              <p class="footnote">가로축 Y(North), 세로축 X(East, 아래쪽 증가)인 탑뷰이며 축 비율은 1:1입니다. 실제 위치는 Gazebo GT를 우선 사용하고, 없는 기록은 PX4 odometry로 명시합니다. 높이가 다른 게이트는 ID와 높이를 함께 표시합니다. 게이트 배치에 여유를 둔 범위만 표시하며, 멀리 벗어난 궤적과 PnP 위치는 잘라 표시합니다.</p>
+              <p class="footnote">가로축 Y(North), 세로축 X(East, 아래쪽 증가)인 탑뷰이며 축 비율은 1:1입니다. 실제 위치는 Gazebo GT를 우선 사용하고, 없는 기록은 PX4 odometry로 명시합니다. PnP ×는 청록=보정 채택, 빨강=기각, 회색=판정 기록 없음입니다. 높이가 다른 게이트는 ID와 높이를 함께 표시합니다. 게이트 배치에 여유를 둔 범위만 표시하며, 멀리 벗어난 궤적과 PnP 위치는 잘라 표시합니다.</p>
             </section>
             <section class="panel">
               <div class="panel-heading">

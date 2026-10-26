@@ -33,6 +33,7 @@ TOPICS = {
     "/adr/state/corrected": "nav_msgs/msg/Odometry",
     "/ov_msckf/poseimu": "geometry_msgs/msg/PoseWithCovarianceStamped",
     "/ov_msckf/odomimu": "nav_msgs/msg/Odometry",
+    "/adr/pnp/decision": "std_msgs/msg/String",
     "/adr/pnp/gate": "adr_msgs/msg/GatePnP",
     "/adr/gate_detections": "adr_msgs/msg/GateDetectionArray",
     "/adr/state/drift": "geometry_msgs/msg/Vector3Stamped",

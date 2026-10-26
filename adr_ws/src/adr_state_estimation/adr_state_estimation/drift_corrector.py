@@ -15,14 +15,16 @@ rviz 에서 연한 VioPath(쌩 VIO)와 진한 CorrectedPath(보정) 를 겹쳐 �
 
 거리 필터와 KF 혁신 잔차 기반 이상치 기각을 적용한다.
 """
+import json
 import time
 import numpy as np
 import rclpy
 from adr_msgs.msg import GatePnP
-from geometry_msgs.msg import PoseStamped, Vector3Stamped
+from geometry_msgs.msg import PoseStamped, Vector3Stamped, Point
+from visualization_msgs.msg import Marker
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String, ColorRGBA
 
 from adr_state_estimation.drift_kf import DriftKF
 from adr_state_estimation.timed_drift import TimedDrift, interpolate
@@ -83,6 +85,15 @@ class DriftCorrector(Node):
         self._sum_vio = self._sum_cor = 0.0
         self._n_err = 0
 
+        self.decision_pub = self.create_publisher(String, '/adr/pnp/decision', 10)
+        self.marks_pub = self.create_publisher(Marker, '/adr/pnp/marks', 10)
+        self.marks = Marker()
+        self.marks.header.frame_id = self.frame_id
+        self.marks.ns = 'pnp'
+        self.marks.type = Marker.LINE_LIST
+        self.marks.scale.x = 0.018
+        self.marks.pose.orientation.w = 1.0
+        self.marks.color.a = 1.0
         self.path = Path()
         self.path.header.frame_id = self.frame_id
         self.odom_pub = self.create_publisher(Odometry, '/adr/state/corrected', 10)
@@ -152,12 +163,14 @@ class DriftCorrector(Node):
     def _on_pnp(self, m: GatePnP):
         # 논문 §2.3(a) 거리 필터 — 너무 가까우면 원근 왜곡, 너무 멀면 코너 해상도 부족
         if not (self.tau_min <= m.distance_m <= self.tau_max):
+            self._decision(m, False, "distance")
             self._n_rej_dist += 1
             return
         self._pending.append((stamp_s(m.header), time.monotonic(), m))
         self._pending.sort(key=lambda item: item[0])
         if len(self._pending) > 100:
-            self._pending.pop(0)
+            _, _, dropped = self._pending.pop(0)
+            self._decision(dropped, False, "queue_overflow")
             self._n_rej_time += 1
         self._drain_pnp()
 
@@ -166,21 +179,40 @@ class DriftCorrector(Node):
             t, received, m = self._pending[0]
             if self.timed.time is not None and t <= self.timed.time:
                 self._pending.pop(0)
+                self._decision(m, False, "time_alignment")
                 self._n_rej_time += 1
                 continue
             if not self._buf or t > self._buf[-1][0]:
                 if time.monotonic() - received < self.wait_s:
                     break
                 self._pending.pop(0)
+                self._decision(m, False, "time_alignment")
                 self._n_rej_time += 1
                 continue
             self._pending.pop(0)
             p_vio = interpolate(self._buf, t, self.max_dt)
             if p_vio is None:
+                self._decision(m, False, "no_interpolation")
                 self._n_rej_time += 1
                 continue
             z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
-            self.timed.update(t, z, p_vio, m.quality)
+            accepted = self.timed.update(t, z, p_vio, m.quality)
+            self._decision(m, accepted, "accepted" if accepted else "innovation_or_invalid")
+
+    def _decision(self, m, accepted, reason):
+        self.decision_pub.publish(String(data=json.dumps(dict(
+            stamp=stamp_s(m.header), gate_id=int(m.gate_id),
+            accepted=bool(accepted), reason=reason))))
+        if not np.isfinite([m.pos_w.x, m.pos_w.y, m.pos_w.z]).all():
+            return
+        color = ColorRGBA(r=0.0, g=0.65, b=0.55, a=1.0) if accepted else ColorRGBA(r=0.9, g=0.15, b=0.15, a=1.0)
+        for dx, dy in ((-.12, -.12), (.12, .12), (-.12, .12), (.12, -.12)):
+            self.marks.points.append(Point(x=m.pos_w.x+dx, y=m.pos_w.y+dy, z=m.pos_w.z))
+            self.marks.colors.append(color)
+        self.marks.points = self.marks.points[-8000:]
+        self.marks.colors = self.marks.colors[-8000:]
+        self.marks.header.stamp = m.header.stamp
+        self.marks_pub.publish(self.marks)
 
     def _report(self):
         if self._n_err == 0:
