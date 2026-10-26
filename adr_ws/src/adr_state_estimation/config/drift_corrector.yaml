@@ -15,4 +15,5 @@ drift_corrector:
     max_dt: 0.15                    # VIO↔PnP stamp 허용 차 [s]
     hold_timeout: 2.5               # 측정이 이 시간 넘게 끊기면 등속 외삽 중단(발산 방지)
     v_max: 0.5                      # drift 속도 상한 [m/s]
+    innovation_gate: 16.27         # 3D squared Mahalanobis threshold; 0 disables
     path_max_points: 6000

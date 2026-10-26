@@ -52,6 +52,7 @@ class DriftCorrector(Node):
         # 측정이 이 시간 넘게 끊기면 등속 외삽을 멈추고 마지막 drift 를 유지한다.
         # 이 코스는 게이트 사이 ~2 초라 그보다 넉넉히 잡는다. (논문에 없는 처리 — drift_kf.predict 주석 참고)
         self.declare_parameter('hold_timeout', 2.5)
+        self.declare_parameter('innovation_gate', 16.27)  # 3D NIS threshold; 0 disables
         self.declare_parameter('v_max', 0.5)            # drift 속도 상한 [m/s]
         self.declare_parameter('path_max_points', 6000)
 
@@ -60,7 +61,8 @@ class DriftCorrector(Node):
                           sigma_v=float(self.get_parameter('sigma_v').value),
                           sigma_r=self.get_parameter('sigma_r').value,
                           lambda_r=float(self.get_parameter('lambda_r').value),
-                          v_max=float(self.get_parameter('v_max').value))
+                          v_max=float(self.get_parameter('v_max').value),
+                          innovation_gate=float(self.get_parameter('innovation_gate').value))
         self.tau_min = float(self.get_parameter('tau_d_min').value)
         self.tau_max = float(self.get_parameter('tau_d_max').value)
         self.max_dt = float(self.get_parameter('max_dt').value)
@@ -157,7 +159,8 @@ class DriftCorrector(Node):
         if p_vio is None:
             return
         z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
-        self.kf.update(z, p_vio, quality=m.quality)
+        if self.kf.update(z, p_vio, quality=m.quality) is None:
+            return  # Rejected measurements must not refresh hold timeout.
         self._t_last_update = t
 
     def _vio_at(self, t: float):
@@ -173,7 +176,8 @@ class DriftCorrector(Node):
         v, c = self._sum_vio / self._n_err, self._sum_cor / self._n_err
         gain = (1.0 - c / v) * 100.0 if v > 1e-6 else 0.0
         self.get_logger().info(
-            f'KF update {self.kf.n_update}회 (거리필터 기각 {self._n_rej_dist})'
+            f'KF update {self.kf.n_update}회 (거리필터 기각 {self._n_rej_dist}, '
+            f'이상치/유효성 기각 {self.kf.n_rejected}, NIS {self.kf.last_nis:.2f})'
             f'{" [유지모드]" if self._holding else ""}, '
             f'drift 추정 {np.round(self.kf.p_d, 3)} m | '
             f'기준 대비 평균오차  VIO {v:.3f} → 보정 {c:.3f} m ({gain:+.0f}%)')

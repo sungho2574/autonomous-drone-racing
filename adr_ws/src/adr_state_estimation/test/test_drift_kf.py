@@ -100,3 +100,38 @@ def test_sigma_r_monotonic(sigma_r):
     """σ_r 이 클수록 PnP 를 덜 믿어 수렴이 느려진다 (발산하진 않는다)."""
     _, c, _ = run(lambda t: np.array([0.4, 0.0, 0.0]), sigma_r=(sigma_r,) * 3)
     assert c < 0.4, f'σ_r={sigma_r} 에서 보정 오차 {c:.3f} m — 발산'
+
+
+def test_outlier_preserves_state_and_recovers():
+    kf = DriftKF()
+    for _ in range(30):
+        kf.predict(0.1)
+        assert kf.update([0.2, 0, 0], [0, 0, 0]) is not None
+    x, covariance, count = kf.x.copy(), kf.P.copy(), kf.n_update
+    assert kf.update([8, -5, 4], [0, 0, 0]) is None
+    np.testing.assert_array_equal(kf.x, x)
+    np.testing.assert_array_equal(kf.P, covariance)
+    assert kf.n_update == count and kf.n_rejected == 1
+    kf.predict(0.1)
+    assert kf.update([0.21, 0, 0], [0, 0, 0]) is not None
+
+
+def test_uncertainty_allows_reacquisition():
+    certain, uncertain = DriftKF(p0_pos=0.01), DriftKF(p0_pos=0.01)
+    uncertain.predict(10, hold=True)
+    assert certain.update([2, 0, 0], [0, 0, 0]) is None
+    assert uncertain.update([2, 0, 0], [0, 0, 0]) is not None
+
+
+@pytest.mark.parametrize('position,quality', [([float('nan'), 0, 0], 1),
+    ([float('inf'), 0, 0], 1), ([0, 0, 0], float('nan')), ([0, 0, 0], 0)])
+def test_invalid_measurement_does_not_poison_filter(position, quality):
+    kf = DriftKF()
+    assert kf.update(position, [0, 0, 0], quality) is None
+    assert np.all(np.isfinite(kf.x)) and np.all(np.isfinite(kf.P))
+    assert kf.n_update == 0
+
+
+def test_gate_can_be_disabled():
+    kf = DriftKF(innovation_gate=0)
+    assert kf.update([10, 0, 0], [0, 0, 0]) is not None

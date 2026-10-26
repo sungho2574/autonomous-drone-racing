@@ -32,7 +32,7 @@ class DriftKF:
 
     def __init__(self, sigma_p: float = 0.1, sigma_v: float = 0.2,
                  sigma_r=(0.25, 0.25, 0.25), lambda_r: float = 1.0,
-                 p0_pos: float = 1.0, p0_vel: float = 1.0, v_max: float = 0.5):
+                 p0_pos: float = 1.0, p0_vel: float = 1.0, v_max: float = 0.5, innovation_gate: float = 16.27):
         self.x = np.zeros(6)
         self.P = np.diag([p0_pos] * 3 + [p0_vel] * 3).astype(float)
         self.sigma_p = float(sigma_p)
@@ -42,6 +42,11 @@ class DriftKF:
         # drift 속도 상한 [m/s]. 측정이 드문드문 들어오면 v_d 가 과하게 잡힐 수 있어
         # hold 로 들어가기 전에도 외삽이 폭주하지 않게 막아 둔다.
         self.v_max = float(v_max)
+        self.innovation_gate = float(innovation_gate)  # squared Mahalanobis distance, 3D
+        if not np.isfinite(self.innovation_gate) or self.innovation_gate < 0:
+            raise ValueError("innovation_gate must be finite and nonnegative")
+        self.n_rejected = 0
+        self.last_nis = float('nan')
         self.n_update = 0
 
     # ------------------------------------------------------------------
@@ -78,14 +83,26 @@ class DriftKF:
         p_pnp : map 기준 기체 위치 (PnP)
         p_vio : 같은 시각의 VIO 위치 (map 기준, 보정 전)
         quality: 0~1. 낮을수록 R 을 키워 덜 믿는다.
+        Returns residual on acceptance, None on rejection (state/covariance unchanged).
         """
         y = np.asarray(p_pnp, dtype=float).reshape(3) - np.asarray(p_vio, dtype=float).reshape(3)
+        if not np.all(np.isfinite(y)) or not np.isfinite(quality) or not 0 < quality <= 1:
+            self.last_nis = float('nan')
+            self.n_rejected += 1
+            return None
         H = np.zeros((3, 6))
         H[:, :3] = np.eye(3)
         # 품질이 낮을수록 분산을 키운다. quality=1 → λ_r, quality→0 → λ_r/0.05 (20배)
         scale = self.lambda_r / max(float(quality), 0.05)
         R = np.diag(self.sigma_r ** 2) * scale
         S = H @ self.P @ H.T + R
+        innovation = y - H @ self.x
+        self.last_nis = float(innovation @ np.linalg.solve(S, innovation))
+        # Reject before modifying either state or covariance. Zero disables gating.
+        if not np.isfinite(self.last_nis) or (self.innovation_gate > 0 and
+                                             self.last_nis > self.innovation_gate):
+            self.n_rejected += 1
+            return None
         K = self.P @ H.T @ np.linalg.inv(S)
         self.x = self.x + K @ (y - H @ self.x)
         self.P = (np.eye(6) - K @ H) @ self.P
