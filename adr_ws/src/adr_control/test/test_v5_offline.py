@@ -38,12 +38,17 @@ def test_world_matches_map_and_ordinary_stacked_gates():
     np.testing.assert_allclose(p[:2], [data["start"]["x"], data["start"]["y"]])
 
 
-def test_v5_retains_handoff_coordinates_and_bounds():
+def test_v5_centered_map_and_translated_bounds():
     data = yaml.safe_load(MAP.read_text())
-    assert 'translation_from_training_enu' not in data['course']
-    assert data['start'] == dict(x=-22., y=8., takeoff_z=1.4)
-    assert [data['gates'][0][k] for k in 'xyz'] == [-25., 14., 1.4]
+    shift = np.asarray(data['course']['translation_from_training_enu'])
+    np.testing.assert_allclose(shift, [15.909090909090908, -46.45454545454545, 0])
+    np.testing.assert_allclose(np.mean([[g['x'], g['y']] for g in data['gates']], axis=0), [0,0], atol=1e-12)
+    np.testing.assert_allclose([data['start']['x'], data['start']['y'], data['start']['takeoff_z']], np.array([-22.,8.,1.4])+shift)
+    np.testing.assert_allclose([data['gates'][0][k] for k in 'xyz'], np.array([-25.,14.,1.4])+shift)
     for policy in ('A_slow', 'B_fast'):
         mp = load_map_from_config(SRC/'adr_control/policies'/policy/'config_asrun.yaml', MAP)
-        np.testing.assert_allclose(mp.bounds_lo, [-28, 5, 0])
-        np.testing.assert_allclose(mp.bounds_hi, [-4, 97.8, 8])
+        np.testing.assert_allclose(mp.bounds_lo, np.array([-28, 5, 0])+shift)
+        np.testing.assert_allclose(mp.bounds_hi, np.array([-4, 97.8, 8])+shift)
+        cfg = yaml.safe_load((SRC/'adr_control/policies'/policy/'config_asrun.yaml').read_text())
+        np.testing.assert_allclose(cfg['track']['extra_xy'], np.array([[-18.,92.],[-20.3,94.8]])+shift[:2])
+        np.testing.assert_allclose(cfg['track']['extra_xy'], data['world']['extra_xy'])

@@ -1,90 +1,94 @@
 course:
   source: MonoRace arXiv 2601.15222 Fig. 2B (M16 top view) + Fig. 1B (t4 split-S)
-  frame_note: Handoff ENU coordinates, unchanged; Gazebo origin equals training map
-    origin. G4/G5 z=4.1 m.
+  frame_note: Handoff ENU translated so gate mean XY is (0,0). Heights and yaw unchanged;
+    G4/G5 z=4.1 m.
   loop: true
+  translation_from_training_enu:
+  - 15.909090909090908
+  - -46.45454545454545
+  - 0.0
 gate:
   inner_size: 1.5
   outer_size: 2.7
   thickness: 0.05
 start:
-  x: -22.0
-  y: 8.0
+  x: -6.090909090909092
+  y: -38.45454545454545
   takeoff_z: 1.4
 gates:
 - id: 1
   name: t0
-  x: -25.0
-  y: 14.0
+  x: -9.090909090909092
+  y: -32.45454545454545
   z: 1.4
   yaw_deg: 125
 - id: 2
   name: t1
-  x: -19.0
-  y: 30.0
+  x: -3.0909090909090917
+  y: -16.454545454545453
   z: 1.4
   yaw_deg: 75
 - id: 3
   name: t2
-  x: -22.0
-  y: 46.0
+  x: -6.090909090909092
+  y: -0.45454545454545325
   z: 1.4
   yaw_deg: 100
 - id: 4
   name: t3
-  x: -20.0
-  y: 63.0
+  x: -4.090909090909092
+  y: 16.545454545454547
   z: 4.1
   yaw_deg: 90
 - id: 5
   name: t4_upper
-  x: -18.0
-  y: 85.0
+  x: -2.0909090909090917
+  y: 38.54545454545455
   z: 4.1
   yaw_deg: 90
 - id: 6
   name: t4_lower
-  x: -18.0
-  y: 85.0
+  x: -2.0909090909090917
+  y: 38.54545454545455
   z: 1.4
   yaw_deg: 270
 - id: 7
   name: t5
-  x: -13.0
-  y: 68.0
+  x: 2.9090909090909083
+  y: 21.545454545454547
   z: 1.4
   yaw_deg: 285
 - id: 8
   name: t6
-  x: -7.0
-  y: 55.0
+  x: 8.909090909090908
+  y: 8.545454545454547
   z: 1.4
   yaw_deg: 270
 - id: 9
   name: t7
-  x: -12.0
-  y: 37.0
+  x: 3.9090909090909083
+  y: -9.454545454545453
   z: 1.4
   yaw_deg: 270
 - id: 10
   name: t8
-  x: -7.0
-  y: 19.0
+  x: 8.909090909090908
+  y: -27.454545454545453
   z: 1.4
   yaw_deg: 270
 - id: 11
   name: t9
-  x: -14.0
-  y: 9.0
+  x: 1.9090909090909083
+  y: -37.45454545454545
   z: 1.4
   yaw_deg: 180
 world:
   bounds_margin: 3.0
   extra_xy:
-  - - -18.0
-    - 92.0
-  - - -20.3
-    - 94.8
+  - - -2.0909090909090917
+    - 45.54545454545455
+  - - -4.390909090909092
+    - 48.345454545454544
   z_min: 0.0
   z_max: 8.0
   virtual_gate_ids: []
