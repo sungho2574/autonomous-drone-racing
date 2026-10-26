@@ -183,6 +183,7 @@ def generate_launch_description(controller='position'):
         Node(package='adr_planning', executable='gate_planner', name='gate_planner',
              parameters=[os.path.join(bringup_share, 'config', 'planner.yaml'),
                          {'laps': LaunchConfiguration('laps'),
+                          'show_planned_path': ParameterValue(LaunchConfiguration('show_planned_path'), value_type=bool),
                           'v_avg': LaunchConfiguration('v_avg'),
                           'a_max': LaunchConfiguration('a_max'),
                           'heading_mode': LaunchConfiguration('heading_mode'),
@@ -266,6 +267,7 @@ def generate_launch_description(controller='position'):
         # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
         DeclareLaunchArgument('map', default_value=PythonExpression(["'a2rl_monorace' if '", LaunchConfiguration('policy'), "' == 'a2rl_monorace' else 'a2rl_monorace_v5'"]) if controller == 'a2rl' else 'cross'),
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
+        DeclareLaunchArgument('show_planned_path', default_value='false' if controller == 'a2rl' else 'true'),
         DeclareLaunchArgument('v_avg', default_value='3.0'),
         DeclareLaunchArgument('a_max', default_value='8.0'),
         DeclareLaunchArgument('heading_mode', default_value='perception_aware'),

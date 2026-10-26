@@ -50,6 +50,7 @@ class GatePlanner(Node):
         super().__init__('gate_planner')
         self.declare_parameter('gates_file', '')
         self.declare_parameter('laps', 1)
+        self.declare_parameter('show_planned_path', True)
         self.declare_parameter('approach_dist', 0.8)
         self.declare_parameter('v_avg', 3.0)
         self.declare_parameter('v_max', 6.0)
@@ -158,6 +159,8 @@ class GatePlanner(Node):
             (ps.pose.orientation.x, ps.pose.orientation.y,
              ps.pose.orientation.z, ps.pose.orientation.w) = yaw_to_quat(yaw)
             path.poses.append(ps)
+        if not self.get_parameter("show_planned_path").value:
+            path.poses.clear()  # Clear even a path retained by an existing RViz.
         self.path_pub.publish(path)
 
 
