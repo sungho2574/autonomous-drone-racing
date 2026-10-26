@@ -348,6 +348,28 @@ def gate_hits(data):
         out[gid]["plan"].append(hit)
     if data["track_start"] is None:
         return out
+    if data["meta"]["parameters"].get("controller") == "a2rl":
+        # RL does not follow the planner's timetable. Anchor comparison windows
+        # to ordered physical passages, preferring independently recorded GT.
+        reference = data.get("ground_truth") or data["poses"].get("actual", [])
+        physical = {g["id"]: crossings(reference, g) for g in gates}
+        expected = []
+        previous = data["track_start"] - 1e-5
+        half = data["course"]["gate"]["inner_size"] / 2
+        for _ in range(laps):
+            for gate in gates:
+                candidates = [h for h in physical[gate["id"]]
+                              if h["t"] > previous + 1e-5
+                              and abs(h["u"]) <= half and abs(h["v"]) <= half
+                              and h["jump_m"] <= 0.75]
+                if not candidates:
+                    break
+                hit = min(candidates, key=lambda h: h["t"])
+                expected.append((gate["id"], hit))
+                previous = hit["t"]
+            else:
+                continue
+            break
     observed = {
         (g["id"], name): crossings(rows, g)
         for g in gates
@@ -544,8 +566,9 @@ def gate_figure(data, destination):
             ax.legend(fontsize=6, loc="upper right")
         for ax in list(axes.flat)[len(gates) :]:
             ax.set_visible(False)
+        timing = "actual passage" if data["meta"]["parameters"].get("controller") == "a2rl" else "planned passage"
         fig.suptitle(
-            f"{data['meta']['track']} · gate passage offsets\nPlane intersections near planned passage time; × = discontinuous correction",
+            f"{data['meta']['track']} · gate passage offsets\nPlane intersections near {timing} time; × = discontinuous correction",
             fontsize=14,
         )
         fig.tight_layout(rect=(0, 0, 1, 0.94))

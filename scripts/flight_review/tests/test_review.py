@@ -230,3 +230,14 @@ def test_native_association_preserves_rejection_and_absent_runner(tmp_path):
     assert series['pnp_assoc_selected_id'][44][1] == 0
     assert series['pnp_assoc_second_px'][45][1] is None
     assert series['pnp_assoc_second_px'][46][1] == 25
+
+
+def test_rl_passages_ignore_planner_timetable(tmp_path):
+    data = load_flight(make_bag(tmp_path))
+    data["meta"]["parameters"]["controller"] = "a2rl"
+    data["plan"] = [[r[0] + 100, *r[1:]] for r in data["plan"]]
+    hits = gate_hits(data)
+    assert all(len(h["actual"]) == len(h["raw"]) == len(h["corrected"]) == 1
+               for h in hits.values())
+    data["plan"] = []
+    assert all(len(h["actual"]) == 1 for h in gate_hits(data).values())
