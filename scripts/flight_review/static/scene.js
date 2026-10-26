@@ -58,6 +58,7 @@ export class FlightScene {
       group.add(new LineSegments2(geometry, new LineMaterial({
         color: info.color,
         linewidth: 2,
+        resolution: new THREE.Vector2(Math.max(1, host.clientWidth), Math.max(1, host.clientHeight)),
         worldUnits: false,
         transparent: true,
         opacity: 0.8,
@@ -284,6 +285,10 @@ export class FlightScene {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
+    // r160 wide lines require explicit viewport size; default (1,1) fills the screen.
+    this.scene.traverse(object => {
+      if (object.material?.isLineMaterial) object.material.resolution.set(w, h);
+    });
     this.render();
   }
   setTime(t) {
