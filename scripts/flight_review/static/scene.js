@@ -57,7 +57,7 @@ export class FlightScene {
       geometry.setPositions(vertices);
       group.add(new LineSegments2(geometry, new LineMaterial({
         color: info.color,
-        linewidth: 2,
+        linewidth: 3,
         resolution: new THREE.Vector2(Math.max(1, host.clientWidth), Math.max(1, host.clientHeight)),
         worldUnits: false,
         transparent: true,
