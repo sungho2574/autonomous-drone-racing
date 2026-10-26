@@ -67,24 +67,6 @@ class GateTracker:
         offset = float(np.hypot(cy, cz)) if passed else 0.0
         return passed, reverse, offset
 
-    def frame_hit(self, prev_pos, curr_pos):
-        """실물 게이트 프레임 충돌 — 목표가 아닌 게이트도 전부 본다 (학습과 동일)."""
-        mp = self.mp
-        si = mp.solid_idx
-        if si.size == 0:
-            return False
-        prev_pos = np.asarray(prev_pos, dtype=np.float64)
-        curr_pos = np.asarray(curr_pos, dtype=np.float64)
-        pl = np.einsum("gij,gj->gi", mp.gate_RT[si], prev_pos - mp.gate_pos[si])
-        cl = np.einsum("gij,gj->gi", mp.gate_RT[si], curr_pos - mp.gate_pos[si])
-        fwd, rev, cy, cz = _crossing(pl, cl)
-        in_panel = ((np.abs(cy) <= mp.panel_half_y[si])
-                    & (cz >= mp.panel_lo[si]) & (cz <= mp.panel_hi[si]))
-        hz, hh = mp.hole_z[si], mp.hole_half[si]
-        in_hole = ((np.abs(cy)[:, None] <= hh)
-                   & (np.abs(cz[:, None] - hz) <= hh)).any(axis=-1)
-        return bool(((fwd | rev) & in_panel & ~in_hole).any())
-
     def out_of_bounds(self, pos):
         pos = np.asarray(pos, dtype=np.float64)
         return bool(((pos < self.mp.bounds_lo) | (pos > self.mp.bounds_hi)).any())
@@ -97,14 +79,12 @@ class GateTracker:
             passed       목표 게이트 정방향 통과
             reverse      역방향 통과 (학습에서는 **즉시 종료** 사유)
             offset       통과 시 중심 오차 ‖(y,z)‖ [m]
-            frame_hit    프레임 충돌 (학습에서는 추락)
             out_of_bounds코스 박스 이탈 (학습에서는 추락)
             lap_done     이 스텝에서 마지막 게이트를 통과해 1 번으로 되감겼는지
             target       갱신된 목표 게이트 인덱스
             gate_id      갱신된 목표 게이트의 맵 yaml id
         """
         passed, reverse, offset = self.target_pass(prev_pos, curr_pos)
-        hit = self.frame_hit(prev_pos, curr_pos)
         oob = self.out_of_bounds(curr_pos)
         lap_done = False
         if passed:
@@ -115,5 +95,5 @@ class GateTracker:
                 self.laps += 1
             self.target = (self.target + 1) % self.mp.num_gates
         return dict(passed=passed, reverse=reverse, offset=offset,
-                    frame_hit=hit, out_of_bounds=oob, lap_done=lap_done,
+                    out_of_bounds=oob, lap_done=lap_done,
                     target=self.target, gate_id=self.mp.gate_ids[self.target])

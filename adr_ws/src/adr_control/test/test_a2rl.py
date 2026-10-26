@@ -53,12 +53,13 @@ def test_handoff_reference_inference():
     np.testing.assert_allclose(mp.gate_pos[:, :2].mean(axis=0), [0, 0], atol=1e-12)
 
 
-def test_shared_panel_holes_and_solid_middle():
+def test_shared_panel_passes_without_software_collision():
     mp = load_map_from_config(ASSETS / 'config_asrun.yaml', MAP)
     tracker = PolicyRunner(ASSETS / 'policy.onnx', mp).tracker
-    for z in (1.4, 5.0):
-        assert not tracker.frame_hit((np.array([-18, 84, z]) + SHIFT), (np.array([-18, 86, z]) + SHIFT))
-    assert tracker.frame_hit((np.array([-18, 84, 3.2]) + SHIFT), (np.array([-18, 86, 3.2]) + SHIFT))
+    # A position crossing solid geometry is not a software collision event.
+    ev = tracker.update(np.array([-18, 84, 3.2]) + SHIFT,
+                        np.array([-18, 86, 3.2]) + SHIFT)
+    assert 'frame_hit' not in ev
     tracker.reset(4)
     ev = tracker.update((np.array([-18, 84, 5.0]) + SHIFT), (np.array([-18, 86, 5.0]) + SHIFT))
     assert ev['passed'] and ev['gate_id'] == 6

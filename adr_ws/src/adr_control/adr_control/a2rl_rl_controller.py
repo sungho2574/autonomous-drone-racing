@@ -249,7 +249,7 @@ class A2RLController(OffboardBase):
                 self.abort(f'policy inference failed: {exc}')
                 return
             events = out['events']
-            failure = next((key for key in ('reverse', 'frame_hit', 'out_of_bounds') if events[key]), None)
+            failure = next((key for key in ('reverse', 'out_of_bounds') if events[key]), None)
             if events['passed']:
                 self.last_pass = now
             finished = self.runner.tracker.laps >= self.cfg['laps']
