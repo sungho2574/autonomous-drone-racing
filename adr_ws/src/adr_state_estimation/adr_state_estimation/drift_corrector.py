@@ -9,13 +9,13 @@ rviz 에서 연한 VioPath(쌩 VIO)와 진한 CorrectedPath(보정) 를 겹쳐 �
 
 시간 정렬
   PnP 측정값의 잔차는 y = p_pnp − p_vio(같은 시각) 이므로, VIO 포즈를 stamp 로 되짚어야 한다.
-  최근 VIO 포즈를 버퍼에 두고 가장 가까운 stamp 를 찾아 쓴다 (max_dt 초과면 버린다).
-  KF 상태를 측정 시각으로 되감지는 않는다 — 시각화 목적이고 어긋나야 수십 ms 라 무시한다.
+  이미지 시각 앞뒤 VIO를 보간한다. 뒤쪽 샘플은 제한 시간 동안 기다린다.
+  KF 갱신 상태는 측정 시각에 유지하고, 출력만 현재 VIO 시각으로 예측한다.
+  이미 처리한 측정보다 오래된 PnP는 기각한다.
 
-논문 §2.3 의 검출 필터 중 여기서는 **거리 필터만** 쓴다. aspect-ratio·occlusion 필터는
-YOLO 가 여러 게이트를 동시에 내는 상황을 위한 것인데, 이 파이프라인의 gate_pnp 는
-가장 큰 검출 1개만 골라 이미 연관(association)까지 끝낸 뒤 넘겨주기 때문이다.
+거리 필터와 KF 혁신 잔차 기반 이상치 기각을 적용한다.
 """
+import time
 import numpy as np
 import rclpy
 from adr_msgs.msg import GatePnP
@@ -25,6 +25,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 
 from adr_state_estimation.drift_kf import DriftKF
+from adr_state_estimation.timed_drift import TimedDrift, interpolate
 
 
 def stamp_s(h) -> float:
@@ -48,7 +49,8 @@ class DriftCorrector(Node):
         # 논문 §2.3(a) 거리 필터. 논문 값 1~13 m 는 실외 대형 트랙 기준이라 이 코스(반경 4 m)에 맞게 축소.
         self.declare_parameter('tau_d_min', 1.0)
         self.declare_parameter('tau_d_max', 8.0)
-        self.declare_parameter('max_dt', 0.15)          # VIO↔PnP stamp 허용 차 [s]
+        self.declare_parameter('pnp_wait_s', 0.25)
+        self.declare_parameter('max_dt', 0.10)          # 보간 앞뒤 VIO 최대 간격 [s]
         # 측정이 이 시간 넘게 끊기면 등속 외삽을 멈추고 마지막 drift 를 유지한다.
         # 이 코스는 게이트 사이 ~2 초라 그보다 넉넉히 잡는다. (논문에 없는 처리 — drift_kf.predict 주석 참고)
         self.declare_parameter('hold_timeout', 2.5)
@@ -69,11 +71,14 @@ class DriftCorrector(Node):
         self.hold_timeout = float(self.get_parameter('hold_timeout').value)
         self.max_points = int(self.get_parameter('path_max_points').value)
 
+        self.timed = TimedDrift(self.kf, self.hold_timeout)
+        self.wait_s = float(self.get_parameter("pnp_wait_s").value)
+        self._pending = []
+        self._n_rej_time = 0
+        self.create_timer(0.02, self._drain_pnp)
         self._buf = []              # [(t, p_vio)] 최근 VIO 포즈
-        self._t_prev = None
         self._ref = None
         self._n_rej_dist = 0
-        self._t_last_update = None
         self._holding = False
         self._sum_vio = self._sum_cor = 0.0
         self._n_err = 0
@@ -104,20 +109,15 @@ class DriftCorrector(Node):
         p = m.pose.pose.position
         p_vio = np.array([p.x, p.y, p.z])
 
-        # 측정이 끊긴 지 오래면 등속 외삽을 멈춘다 (안 그러면 v_d 적분으로 발산)
-        hold = (self._t_last_update is None or (t - self._t_last_update) > self.hold_timeout)
-        if hold != self._holding:
-            self.get_logger().info('PnP 끊김 → drift 유지 모드' if hold else 'PnP 재개 → 등속 외삽 재개')
-            self._holding = hold
-        if self._t_prev is not None:
-            self.kf.predict(t - self._t_prev, hold=hold)
-        self._t_prev = t
-
+        if not np.all(np.isfinite(p_vio)) or (self._buf and t <= self._buf[-1][0]):
+            return
         self._buf.append((t, p_vio))
-        if len(self._buf) > 300:                 # 30 Hz 기준 10 초치
-            del self._buf[:len(self._buf) - 300]
-
-        p_cor = self.kf.correct(p_vio)
+        self._buf = self._buf[-300:]
+        self._drain_pnp()
+        predicted = self.timed.at(t)
+        self._holding = (self.timed.last_update is None or
+                         t - self.timed.last_update > self.hold_timeout)
+        p_cor = predicted.correct(p_vio)
 
         out = Odometry()
         out.header.stamp = m.header.stamp
@@ -139,7 +139,7 @@ class DriftCorrector(Node):
 
         d = Vector3Stamped()
         d.header = out.header
-        d.vector.x, d.vector.y, d.vector.z = map(float, self.kf.p_d)
+        d.vector.x, d.vector.y, d.vector.z = map(float, predicted.p_d)
         self.drift_pub.publish(d)
 
         if self._ref is not None:
@@ -154,21 +154,33 @@ class DriftCorrector(Node):
         if not (self.tau_min <= m.distance_m <= self.tau_max):
             self._n_rej_dist += 1
             return
-        t = stamp_s(m.header)
-        p_vio = self._vio_at(t)
-        if p_vio is None:
-            return
-        z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
-        if self.kf.update(z, p_vio, quality=m.quality) is None:
-            return  # Rejected measurements must not refresh hold timeout.
-        self._t_last_update = t
+        self._pending.append((stamp_s(m.header), time.monotonic(), m))
+        self._pending.sort(key=lambda item: item[0])
+        if len(self._pending) > 100:
+            self._pending.pop(0)
+            self._n_rej_time += 1
+        self._drain_pnp()
 
-    def _vio_at(self, t: float):
-        """stamp t 에 가장 가까운 VIO 위치. 허용 오차를 넘으면 None."""
-        if not self._buf:
-            return None
-        i = min(range(len(self._buf)), key=lambda k: abs(self._buf[k][0] - t))
-        return self._buf[i][1] if abs(self._buf[i][0] - t) <= self.max_dt else None
+    def _drain_pnp(self):
+        while self._pending:
+            t, received, m = self._pending[0]
+            if self.timed.time is not None and t <= self.timed.time:
+                self._pending.pop(0)
+                self._n_rej_time += 1
+                continue
+            if not self._buf or t > self._buf[-1][0]:
+                if time.monotonic() - received < self.wait_s:
+                    break
+                self._pending.pop(0)
+                self._n_rej_time += 1
+                continue
+            self._pending.pop(0)
+            p_vio = interpolate(self._buf, t, self.max_dt)
+            if p_vio is None:
+                self._n_rej_time += 1
+                continue
+            z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
+            self.timed.update(t, z, p_vio, m.quality)
 
     def _report(self):
         if self._n_err == 0:
@@ -177,6 +189,7 @@ class DriftCorrector(Node):
         gain = (1.0 - c / v) * 100.0 if v > 1e-6 else 0.0
         self.get_logger().info(
             f'KF update {self.kf.n_update}회 (거리필터 기각 {self._n_rej_dist}, '
+            f'시간정합 기각 {self._n_rej_time}, 대기 {len(self._pending)}, '
             f'이상치/유효성 기각 {self.kf.n_rejected}, NIS {self.kf.last_nis:.2f})'
             f'{" [유지모드]" if self._holding else ""}, '
             f'drift 추정 {np.round(self.kf.p_d, 3)} m | '

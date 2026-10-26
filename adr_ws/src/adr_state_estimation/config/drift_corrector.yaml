@@ -12,7 +12,8 @@ drift_corrector:
     # --- 논문 §2.3(a) 거리 필터. 논문 1~13 m 는 실외 대형 트랙 기준 ---
     tau_d_min: 1.0
     tau_d_max: 8.0
-    max_dt: 0.15                    # VIO↔PnP stamp 허용 차 [s]
+    max_dt: 0.10                    # 보간에 쓰는 앞뒤 VIO의 최대 간격 [s]
+    pnp_wait_s: 0.25                # 뒤쪽 VIO 대기 제한 (wall seconds)
     hold_timeout: 2.5               # 측정이 이 시간 넘게 끊기면 등속 외삽 중단(발산 방지)
     v_max: 0.5                      # drift 속도 상한 [m/s]
     innovation_gate: 16.27         # 3D squared Mahalanobis threshold; 0 disables
