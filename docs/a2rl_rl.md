@@ -233,4 +233,4 @@ GT 독립으로 만드는 옵션은 아니다. VIO의 최초 map 정렬도 기�
 
 시뮬레이터 RL 주행 중 상태 age/제어 주기 지연, 역통과, 경계 이탈, 주행/게이트 진행 시간 초과로 강제 착륙하지 않는다. TRACK에서는 마지막 유효 측정을 사용한다. 입력 부재·추론 실패·이륙 준비 실패는 LAND 대신 FAULT_HOLD로 전환한다. 정상 완주 후 land_after 착륙과 PX4 자체 failsafe는 별개다.
 
-완주 시 land_after=true이면 위치 유지·복귀 단계 없이 즉시 PX4 NAV_LAND를 보낸다. land_after=false일 때만 완주 위치 유지로 전환한다.
+완주 시 land_after=true이면 Offboard 속도 제어로 즉시 하강한다. 위치 목표는 NaN, 수평 속도는 0, 하강 속도는 landing_speed(기본 0.5 m/s)이며 NAV_LAND를 보내지 않는다. 최신 vehicle_land_detected의 landed 확인 후 일반 disarm 명령을 보낸다. land_after=false일 때만 완주 위치 유지로 전환한다.

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
-from px4_msgs.msg import VehicleRatesSetpoint, VehicleStatus, VehicleOdometry
+from px4_msgs.msg import VehicleRatesSetpoint, VehicleStatus, VehicleOdometry, VehicleLandDetected
 from std_msgs.msg import String
 
 from adr_control.a2rl_gt import state_from_gt
@@ -25,7 +25,7 @@ class A2RLController(OffboardBase):
                         laps=1, land_after=True, time_scale=1.0,
                         gt_timeout=0.10, control_gap_timeout=0.10,
                         takeoff_timeout=30.0, pos_tol=0.25, vel_tol=0.3,
-                        max_flight_time=180.0, gate_timeout=20.0, hold_time=3.0)
+                        max_flight_time=180.0, gate_timeout=20.0, hold_time=3.0, landing_speed=0.5)
         for name, value in defaults.items():
             self.declare_parameter(name, value)
         self.cfg = {name: self.get_parameter(name).value for name in defaults}
@@ -41,7 +41,7 @@ class A2RLController(OffboardBase):
         if self.cfg['laps'] < 1:
             raise ValueError('laps must be >= 1')
         for name in ('vio_timeout', 'px4_timeout', 'gt_timeout', 'control_gap_timeout', 'takeoff_timeout',
-                     'pos_tol', 'vel_tol', 'max_flight_time', 'gate_timeout', 'hold_time'):
+                     'pos_tol', 'vel_tol', 'max_flight_time', 'gate_timeout', 'hold_time', 'landing_speed'):
             if not np.isfinite(self.cfg[name]) or self.cfg[name] <= 0:
                 raise ValueError(f'{name} must be finite and positive')
         if not 40 <= self.cfg['camera_uptilt_deg'] <= 50:
@@ -58,10 +58,15 @@ class A2RLController(OffboardBase):
         self.track_start = self.last_pass = self.state_start = self.now()
         self.state = 'WAIT_GT' if self.cfg['state_source'] == 'gt' else 'WAIT_STATE'
         self.reason = ''
+        self.landed = False
+        self.landed_received = None
         self.hold_pos = None
         self.hold_yaw = self.takeoff_yaw
         self.warm = 0
         ns = self.get_parameter('fmu_ns').value
+        self.create_subscription(VehicleLandDetected,
+            px4_topic(f'{ns}/fmu/out/vehicle_land_detected', VehicleLandDetected),
+            self.on_land_detected, PX4_SUB_QOS)
         self.rate_pub = self.create_publisher(
             VehicleRatesSetpoint, px4_topic(f'{ns}/fmu/in/vehicle_rates_setpoint',
                                           VehicleRatesSetpoint), PX4_PUB_QOS)
@@ -159,6 +164,16 @@ class A2RLController(OffboardBase):
     def hold(self):
         self.publish_offboard_mode(position=True)
         self.publish_trajectory_setpoint(self.hold_pos, yaw_enu=self.hold_yaw)
+
+    def on_land_detected(self, msg):
+        self.landed = bool(msg.landed)
+        self.landed_received = self.now()
+
+    def descend(self):
+        # Pure velocity control: no XY point to return to after braking.
+        self.publish_offboard_mode(position=False, velocity=True)
+        self.publish_trajectory_setpoint(None, v_enu=[0.0, 0.0, -self.cfg['landing_speed']],
+                                         yaw_enu=self.hold_yaw)
 
     def abort(self, reason):
         self.get_logger().error(reason)
@@ -268,8 +283,9 @@ class A2RLController(OffboardBase):
                 return
             if finished:
                 if self.cfg['land_after']:
-                    self.land()
+                    self.hold_yaw = float(rpy_from_quat(observation['quat'])[2])
                     self.goto('LAND', 'requested laps completed')
+                    self.descend()
                     return
                 self.hold_pos = (self.position_world.copy() if self.cfg['state_source'] == 'measured'
                                  else observation['pos'].copy())
@@ -291,13 +307,18 @@ class A2RLController(OffboardBase):
         elif self.state == 'HOLD':
             self.hold()
             if self.cfg['land_after'] and elapsed >= self.cfg['hold_time']:
-                self.land()
                 self.goto('LAND')
+                self.descend()
         elif self.state == 'LAND':
-            if not self.armed and elapsed > 2.0:
+            if not self.armed:
                 self.goto('DONE')
-            elif self._tick % 50 == 0 and self._status.nav_state != VehicleStatus.NAVIGATION_STATE_AUTO_LAND:
-                self.land()
+            elif self.in_offboard:
+                self.descend()
+                # Only fresh PX4 ground-contact confirmation can trigger disarm.
+                if (elapsed > 0.5 and self.landed and self.landed_received is not None
+                        and self.landed_received >= self.state_start
+                        and 0 <= now - self.landed_received < 0.5 and self._tick % 10 == 0):
+                    self.disarm()
 
 
 def main():

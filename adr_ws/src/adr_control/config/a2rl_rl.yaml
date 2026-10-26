@@ -19,3 +19,4 @@ a2rl_rl_controller:
     max_flight_time: 180.0
     gate_timeout: 20.0
     hold_time: 3.0
+    landing_speed: 0.5  # m/s downward; zero horizontal velocity, no position return

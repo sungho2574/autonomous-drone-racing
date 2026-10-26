@@ -143,8 +143,8 @@ def test_completed_lap_lands_without_position_return(controller):
     node, clock, sent, modes, lands = controller
     node.runner.tracker.laps = node.cfg['laps']
     node.step(.02)
-    assert node.state == 'LAND' and lands and not sent
-    assert not modes  # No position hold setpoint before handing over to PX4 LAND.
+    assert node.state == 'LAND' and not lands and not sent
+    assert modes == [dict(position=False, velocity=True)]
 
 
 def test_completed_lap_switches_to_hold(controller):
@@ -242,3 +242,25 @@ def test_measured_takeoff_waits_for_vio_then_switches(controller):
     node.vio_position = node.mp.start_pos.copy()
     node.step(.02)
     assert node.state == 'TRACK'
+
+
+def test_descent_has_no_position_target_and_requires_fresh_landed(controller):
+    node, clock, sent, modes, lands = controller
+    node.state = 'LAND'
+    node.state_start = clock[0] - 1
+    node.hold_yaw = 0.0
+    targets, disarms = [], []
+    node._sp_pub.publish = targets.append
+    node.disarm = lambda: disarms.append(True)
+    node.step(.02)
+    assert not lands and not disarms
+    assert np.isnan(targets[-1].position).all()
+    np.testing.assert_allclose(targets[-1].velocity, [0, 0, .5])
+    node.landed = True
+    node.landed_received = clock[0] - 1
+    node.step(.02)
+    assert not disarms
+    node.landed_received = clock[0]
+    node._tick = 10
+    node.step(.02)
+    assert disarms
