@@ -121,8 +121,18 @@ document.querySelectorAll('input[name="layout"]').forEach(
       applyView();
     }),
 );
-$("fit-scene").onclick = () => viewer?.fit();
-$("top-scene").onclick = () => viewer?.fit(true);
+$("scene-center").onchange = () => {
+  if ($("scene-center").value === "auto") viewer?.fit();
+  else viewer?.focusCenter($("scene-center").value);
+};
+$("fit-scene").onclick = () => {
+  $("scene-center").value = "auto";
+  viewer?.fit();
+};
+$("top-scene").onclick = () => {
+  viewer?.fit(true);
+  viewer?.focusCenter($("scene-center").value);
+};
 applyView();
 function dispose() {
   viewer?.dispose();
@@ -152,6 +162,15 @@ async function selectRun(id) {
     if (!r.ok) throw Error(d.error || "분석 실패");
     if (ticket !== request) return;
     payload = d;
+    $("scene-center").replaceChildren(
+      ...[["auto", "전체 궤적 중심"], ["origin", "원점 (0, 0, 0)"],
+        ...(d.scene?.gates || []).map(g => [String(g.id), `G${g.id} (높이 ${g.z.toFixed(1)} m)`])]
+        .map(([value, label]) => {
+          const option = el("option", label);
+          option.value = value;
+          return option;
+        }),
+    );
     $("empty").hidden = true;
     $("report").hidden = false;
     $("title").textContent = d.meta.track;

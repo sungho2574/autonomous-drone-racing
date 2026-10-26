@@ -262,6 +262,20 @@ export class FlightScene {
     this.orbit.update();
     this.render();
   }
+  focusCenter(value) {
+    let center;
+    if (value === "origin") center = new THREE.Vector3(0, 0, 0);
+    else {
+      const gate = this.data.gates.find(g => String(g.id) === value);
+      if (!gate) return;
+      center = new THREE.Vector3(gate.x, gate.y, gate.z);
+    }
+    // Translate camera and orbit target together, preserving zoom and view angle.
+    this.camera.position.add(center.clone().sub(this.orbit.target));
+    this.orbit.target.copy(center);
+    this.orbit.update();
+    this.render();
+  }
   resizeView() {
     const w = this.host.clientWidth,
       h = this.host.clientHeight;
