@@ -474,7 +474,7 @@ function chart(title, unit, description, keys, all) {
         ...keys.map((k, i) => ({
           label: pretty(k),
           stroke: palette[i % palette.length],
-          width: 1.5,
+          width: 2,
           points: { show: false },
           spanGaps: false,
         })),

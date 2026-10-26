@@ -424,7 +424,7 @@ def topview_figure(data, destination):
         # Never connect separate recording intervals across long time gaps.
         cuts = np.flatnonzero(np.diff(points[:, 0]) > 0.3) + 1
         for i, part in enumerate(np.split(points, cuts)):
-            ax.plot(part[:, 2], part[:, 1], color=color, lw=1.3, alpha=0.85,
+            ax.plot(part[:, 2], part[:, 1], color=color, lw=2, alpha=0.85,
                     label=label if i == 0 else None,
                     marker="." if len(part) == 1 else None)
     pnp = data.get("pnp", [])
