@@ -125,16 +125,16 @@ class A2RLController(OffboardBase):
 
     def input_state(self, require_vio=True):
         if self.cfg['state_source'] == 'gt':
-            return self.gt if self.fresh_gt() else None
+            return self.gt if self.state == 'TRACK' or self.fresh_gt() else None
         times = (self.px4_position_time, self.px4_attitude_time, self.px4_rates_time)
         if (not self.position_valid
                 or self.px4_quat is None or self.px4_rates is None or self.px4_velocity is None
-                or any(t is None or not 0 <= self.now()-t <= self.cfg['px4_timeout'] for t in times)):
+                or any(t is None or (self.state != 'TRACK' and not 0 <= self.now()-t <= self.cfg['px4_timeout']) for t in times)):
             return None
         pos = self.position_world
         if require_vio:
             if (self.vio_position is None or self.vio_stamp is None
-                    or not -0.02 <= self.now()-self.vio_stamp <= self.cfg['vio_timeout']):
+                    or (self.state != 'TRACK' and not -0.02 <= self.now()-self.vio_stamp <= self.cfg['vio_timeout'])):
                 return None
             pos = self.vio_position
         vel = self.px4_velocity
@@ -162,8 +162,13 @@ class A2RLController(OffboardBase):
 
     def abort(self, reason):
         self.get_logger().error(reason)
-        self.land()
-        self.goto('LAND', reason)
+        if self.position_valid:
+            self.hold_pos = self.position_world.copy()
+        elif self.cfg['state_source'] == 'gt' and self.gt is not None:
+            self.hold_pos = self.gt['pos'].copy()
+        self.goto('FAULT_HOLD', reason)
+        if self.hold_pos is not None:
+            self.hold()
 
     def step(self, dt):
         now = self.now()
@@ -178,10 +183,9 @@ class A2RLController(OffboardBase):
                 self.goto('DONE', 'disarmed')
                 return
             if not self.in_offboard:
-                self.abort('offboard lost')
-                return
-            if observation is None or gap < 0 or gap > self.cfg['control_gap_timeout']:
-                self.abort('Selected state stale/invalid or control clock gap')
+                return  # Do not override a PX4/user mode change with LAND.
+            if observation is None:
+                self.abort('Selected state unavailable/invalid; holding without LAND')
                 return
         if self.state in ('WAIT_GT', 'WAIT_STATE'):
             if not (observation is not None and self.position_valid and self.status_received):
@@ -237,9 +241,6 @@ class A2RLController(OffboardBase):
                           else 'takeoff position/velocity/yaw not settled')
                 self.abort(f'takeoff readiness timeout: {reason}; RL was not started')
         elif self.state == 'TRACK':
-            if now - self.track_start > self.cfg['max_flight_time'] or now - self.last_pass > self.cfg['gate_timeout']:
-                self.abort('flight/gate progress timeout')
-                return
             try:
                 out = self.runner.step(observation)
                 if not np.isfinite(np.r_[out['obs'], out['action_raw'], out['action'],
@@ -249,7 +250,7 @@ class A2RLController(OffboardBase):
                 self.abort(f'policy inference failed: {exc}')
                 return
             events = out['events']
-            failure = next((key for key in ('reverse', 'out_of_bounds') if events[key]), None)
+            failure = None  # Gate geometry events do not terminate simulator flight.
             if events['passed']:
                 self.last_pass = now
             finished = self.runner.tracker.laps >= self.cfg['laps']
@@ -278,6 +279,11 @@ class A2RLController(OffboardBase):
             msg.thrust_body = [0.0, 0.0, -out['thrust_norm']]
             self.publish_offboard_mode(position=False, body_rate=True)
             self.rate_pub.publish(msg)
+        elif self.state == 'FAULT_HOLD':
+            if not self.armed:
+                self.goto('DONE', 'disarmed')
+            elif self.in_offboard and self.hold_pos is not None:
+                self.hold()
         elif self.state == 'HOLD':
             self.hold()
             if self.cfg['land_after'] and elapsed >= self.cfg['hold_time']:

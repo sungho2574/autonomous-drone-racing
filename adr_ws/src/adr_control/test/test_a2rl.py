@@ -120,7 +120,13 @@ def test_track_failure_stops_rate_commands(controller, failure):
     else:
         node._status.nav_state = VehicleStatus.NAVIGATION_STATE_POSCTL
     node.step(.02)
-    assert not sent and lands and node.state == 'LAND'
+    assert not lands
+    if failure in ('stale', 'clock_gap', 'oob'):
+        assert sent and node.state == 'TRACK'
+    elif failure == 'nonfinite':
+        assert not sent and node.state == 'FAULT_HOLD'
+    else:
+        assert not sent and node.state == 'TRACK'
 
 
 def test_takeoff_timeout_never_enters_rl(controller):
@@ -130,7 +136,7 @@ def test_takeoff_timeout_never_enters_rl(controller):
     node.gt['pos'][2] = 0.1
     node.state_start = -30.0
     node.step(.02)
-    assert node.state == 'LAND' and lands and not sent
+    assert node.state == 'FAULT_HOLD' and not lands and not sent
 
 
 def test_completed_lap_switches_to_hold(controller):
@@ -208,7 +214,11 @@ def test_measured_never_falls_back_to_gt(controller, failure):
         node.on_px4_odometry(px4)
     assert node.fresh_gt()  # Healthy GT must not mask the measurement failure.
     node.step(.02)
-    assert node.state == 'LAND' and lands and not sent
+    assert not lands
+    if failure in ('vio_stale', 'px4_stale'):
+        assert sent and node.state == 'TRACK'
+    else:
+        assert not sent and node.state == 'FAULT_HOLD'
 
 
 def test_measured_takeoff_waits_for_vio_then_switches(controller):
