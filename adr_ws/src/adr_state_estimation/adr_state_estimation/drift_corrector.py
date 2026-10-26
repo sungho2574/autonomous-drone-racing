@@ -54,7 +54,7 @@ class DriftCorrector(Node):
         # 측정이 이 시간 넘게 끊기면 등속 외삽을 멈추고 마지막 drift 를 유지한다.
         # 이 코스는 게이트 사이 ~2 초라 그보다 넉넉히 잡는다. (논문에 없는 처리 — drift_kf.predict 주석 참고)
         self.declare_parameter('hold_timeout', 2.5)
-        self.declare_parameter('innovation_gate', 16.27)  # 3D NIS threshold; 0 disables
+        self.declare_parameter('innovation_gate', 7.81)  # 3D NIS threshold; 0 disables
         self.declare_parameter('v_max', 0.5)            # drift 속도 상한 [m/s]
         self.declare_parameter('path_max_points', 6000)
 

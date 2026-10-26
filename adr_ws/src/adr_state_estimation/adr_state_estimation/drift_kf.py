@@ -32,7 +32,7 @@ class DriftKF:
 
     def __init__(self, sigma_p: float = 0.1, sigma_v: float = 0.2,
                  sigma_r=(0.25, 0.25, 0.25), lambda_r: float = 1.0,
-                 p0_pos: float = 1.0, p0_vel: float = 1.0, v_max: float = 0.5, innovation_gate: float = 16.27):
+                 p0_pos: float = 1.0, p0_vel: float = 1.0, v_max: float = 0.5, innovation_gate: float = 7.81):
         self.x = np.zeros(6)
         self.P = np.diag([p0_pos] * 3 + [p0_vel] * 3).astype(float)
         self.sigma_p = float(sigma_p)
