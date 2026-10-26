@@ -1,5 +1,8 @@
 import * as THREE from "./vendor/three/three.module.min.js";
 import { OrbitControls } from "./vendor/three/OrbitControls.js";
+import { LineSegments2 } from "./vendor/three/LineSegments2.js";
+import { LineSegmentsGeometry } from "./vendor/three/LineSegmentsGeometry.js";
+import { LineMaterial } from "./vendor/three/LineMaterial.js";
 import { samplePose } from "./pose.mjs";
 export const paths = {
   plan: { name: "Plan", color: "#81c784" },
@@ -50,21 +53,15 @@ export class FlightScene {
         if (rows[i][0] - rows[i - 1][0] > maxGap) continue;
         vertices.push(...rows[i - 1].slice(1, 4), ...rows[i].slice(1, 4));
       }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(vertices, 3),
-      );
-      group.add(
-        new THREE.LineSegments(
-          geometry,
-          new THREE.LineBasicMaterial({
-            color: info.color,
-            transparent: true,
-            opacity: 0.8,
-          }),
-        ),
-      );
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(vertices);
+      group.add(new LineSegments2(geometry, new LineMaterial({
+        color: info.color,
+        linewidth: 2,
+        worldUnits: false,
+        transparent: true,
+        opacity: 0.8,
+      })));
       const marker = new THREE.Group();
       marker.add(
         new THREE.Mesh(
