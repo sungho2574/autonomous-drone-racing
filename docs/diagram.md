@@ -1,7 +1,7 @@
 ```mermaid
 flowchart LR
     C["Camera"]
-    R["Raspberry Pi 5"]
+    R["Jetson Orin Nano"]
     P["PX4"]
     M["Motors ×4"]
 
