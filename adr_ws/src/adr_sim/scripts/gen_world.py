@@ -379,7 +379,7 @@ def build_world(name: str, mpath: str, scene: dict, out: str, racer_model: str) 
     <include>
       <uri>model://{racer_model}</uri>
       <name>{racer_model}</name>
-      <pose>{st['x']} {st['y']} 0.05 0 0 0</pose>
+      <pose>{st['x']} {st['y']} 0.05 0 0 {radians(float(st.get('yaw_deg', 0.0))):.6f}</pose>
     </include>
 """)
     os.makedirs(os.path.dirname(out), exist_ok=True)

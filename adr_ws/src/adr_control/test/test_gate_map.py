@@ -47,5 +47,10 @@ def test_gate_map_world_geometry():
         assert pose[5] == pytest.approx(np.deg2rad(g['yaw_deg']),abs=1e-6)
         assert node.findtext('uri') == 'model://adr_gate_songdo'
     np.testing.assert_allclose(list(map(float,includes['adr_racer'].findtext('pose').split()))[:2],[-2,-2.8])
+    spawn = list(map(float, includes['adr_racer'].findtext('pose').split()))
+    g1 = data['gates'][0]
+    expected_yaw = np.arctan2(g1['y'] - spawn[1], g1['x'] - spawn[0])
+    assert spawn[5] == pytest.approx(expected_yaw, abs=1e-6)
+    assert np.deg2rad(data['start']['yaw_deg']) == pytest.approx(expected_yaw)
     walls={m.get('name'):m for m in tree.findall('./world/model') if m.get('name').startswith('room_')}
     assert not walls

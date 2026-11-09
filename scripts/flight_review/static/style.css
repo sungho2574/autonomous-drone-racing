@@ -552,3 +552,8 @@ header {
 #error-table th, #error-table td { padding: 12px 9px; text-align: right; border-bottom: 1px solid #293347; white-space: nowrap; }
 #error-table th:first-child { text-align: left; }
 #error-table thead { color: #94a9c7; }
+
+.playback { position: sticky; top: 0; z-index: 15; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #182130; }
+.playback input[type=range] { flex: 1; min-width: 140px; accent-color: #4ba3ff; }
+.playback output { font-variant-numeric: tabular-nums; }
+.playback label { white-space: nowrap; }

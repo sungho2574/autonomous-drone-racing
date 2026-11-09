@@ -13,7 +13,7 @@ import rclpy
 from adr_msgs.msg import Gate as GateMsg
 from adr_msgs.msg import GateArray
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import Point, PoseStamped
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -159,24 +159,28 @@ class GateMarkers(Node):
             xs = [float(room['origin_x']), float(room['origin_x']) + float(room['width'])]
             ys = [float(room['origin_y']), float(room['origin_y']) + float(room['length'])]
             zs = [0.0, float(room['height'])]
-            guide = Marker()
-            guide.header.frame_id, guide.header.stamp = self.frame_id, stamp
-            guide.ns, guide.id = 'room_bounds', 0
-            guide.type, guide.action = Marker.LINE_LIST, Marker.ADD
-            guide.pose.orientation.w = 1.0
-            guide.scale.x = 0.025
-            guide.color.r, guide.color.g, guide.color.b, guide.color.a = 0.4, 0.75, 1.0, 0.65
-            # Four edges parallel to each axis: 12 edges, no solid surfaces.
+            # Solid, opaque bars avoid billboard-line and transparency artifacts.
+            edges = []
             for y in ys:
                 for z in zs:
-                    guide.points.extend([Point(x=x, y=y, z=z) for x in xs])
+                    edges.append(((xs[0], y, z), (xs[1], y, z)))
             for x in xs:
                 for z in zs:
-                    guide.points.extend([Point(x=x, y=y, z=z) for y in ys])
+                    edges.append(((x, ys[0], z), (x, ys[1], z)))
             for x in xs:
                 for y in ys:
-                    guide.points.extend([Point(x=x, y=y, z=z) for z in zs])
-            arr.markers.append(guide)
+                    edges.append(((x, y, zs[0]), (x, y, zs[1])))
+            for index, (begin, end) in enumerate(edges):
+                guide = Marker()
+                guide.header.frame_id, guide.header.stamp = self.frame_id, stamp
+                guide.ns, guide.id = 'room_bounds', index
+                guide.type, guide.action = Marker.CUBE, Marker.ADD
+                guide.pose.orientation.w = 1.0
+                for axis, lo, hi in zip('xyz', begin, end):
+                    setattr(guide.pose.position, axis, (lo + hi) / 2.0)
+                    setattr(guide.scale, axis, abs(hi - lo) or 0.025)
+                guide.color.r, guide.color.g, guide.color.b, guide.color.a = 0.4, 0.75, 1.0, 1.0
+                arr.markers.append(guide)
         return arr
 
     def _on_path_timer(self):

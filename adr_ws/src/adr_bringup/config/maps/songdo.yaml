@@ -42,6 +42,7 @@ start:
   x: -2.0
   y: -2.8
   takeoff_z: 0.75
+  yaw_deg: 90.0
 course:
   source: scripts/gate_map/gate_map.yaml + handoff_sungho_gatemap_20261108
   loop: true

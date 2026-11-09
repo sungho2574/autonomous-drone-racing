@@ -19,6 +19,50 @@ let runs = [],
   payload = null,
   viewer = null,
   hoverTime = null;
+let playing = false, playbackFrame = null, lastTick = null, syncingCursor = false;
+function pausePlayback() {
+  playing = false;
+  if (playbackFrame !== null) cancelAnimationFrame(playbackFrame);
+  playbackFrame = null;
+  lastTick = null;
+  $("play-toggle").textContent = "재생";
+}
+function seekTime(t, syncPlots = true) {
+  if (!payload || !Number.isFinite(t)) return;
+  t = Math.max(0, Math.min(payload.duration, t));
+  updateSceneTime(t);
+  $("play-seek").value = t;
+  $("play-time").textContent = `${t.toFixed(3)} / ${payload.duration.toFixed(3)} s`;
+  if (syncPlots) {
+    syncingCursor = true;
+    try {
+      for (const p of plots) {
+        const left = p.valToPos(t, "x");
+        p.setCursor({left: t < p.scales.x.min || t > p.scales.x.max ? -10 : left, top: 0});
+      }
+    } finally { syncingCursor = false; }
+  }
+}
+function playbackTick(now) {
+  if (!playing) return;
+  const dt = lastTick === null ? 0 : (now - lastTick) / 1000;
+  lastTick = now;
+  seekTime((hoverTime ?? 0) + dt * Number($("play-speed").value));
+  if (hoverTime >= payload.duration) pausePlayback();
+  else playbackFrame = requestAnimationFrame(playbackTick);
+}
+$("play-toggle").onclick = () => {
+  if (playing) return pausePlayback();
+  if (!payload || payload.duration <= 0) return;
+  if (hoverTime >= payload.duration) seekTime(0);
+  playing = true;
+  $("play-toggle").textContent = "일시정지";
+  playbackFrame = requestAnimationFrame(playbackTick);
+};
+$("play-seek").oninput = () => { pausePlayback(); seekTime(Number($("play-seek").value)); };
+$("play-start").onclick = () => { pausePlayback(); seekTime(0); };
+$("play-history").onchange = () => viewer?.setHistory($("play-history").checked);
+document.addEventListener("visibilitychange", () => { if (document.hidden) pausePlayback(); });
 let viewMode = "graphs";
 try {
   viewMode =
@@ -98,6 +142,7 @@ function applyView() {
         $("pose-status"),
         payload.scene,
       );
+      viewer.setHistory($("play-history").checked);
       updateSceneTime(hoverTime ?? payload.scene.initial_time);
     } catch (error) {
       $("scene-canvas").replaceChildren(
@@ -135,6 +180,8 @@ $("top-scene").onclick = () => {
 };
 applyView();
 function dispose() {
+  pausePlayback();
+  for (const id of ["play-toggle", "play-start", "play-seek"]) $(id).disabled = true;
   viewer?.dispose();
   viewer = null;
   payload = null;
@@ -202,6 +249,9 @@ async function selectRun(id) {
     applyView();
     renderErrors(d.error_report);
     renderCharts(d.series);
+    $("play-seek").max = Math.max(0, d.duration);
+    for (const id of ["play-toggle", "play-start", "play-seek"]) $(id).disabled = !(d.duration > 0);
+    seekTime(d.scene?.initial_time ?? 0);
   } catch (e) {
     if (ticket !== request) return;
     $("empty").replaceChildren(
@@ -484,8 +534,8 @@ function chart(title, unit, description, keys, all) {
           (u) => {
             // Only the plot under the mouse drives 3D; synchronized recipients may
             // have different sample ranges. Use the actual cursor time, not its index.
-            if (target.matches(":hover") && u.cursor.left >= 0)
-              updateSceneTime(u.posToVal(u.cursor.left, "x"));
+            if (!syncingCursor && !playing && target.matches(":hover") && u.cursor.left >= 0)
+              seekTime(u.posToVal(u.cursor.left, "x"), false);
             keys.forEach((k, i) => {
               const v =
                 u.cursor.idx == null ? null : u.data[i + 1][u.cursor.idx];
