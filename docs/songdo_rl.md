@@ -2,9 +2,8 @@
 
 `handoff_sungho_gatemap_20261108.zip`의 `main`(25M), `slow`(5M)를 각각
 `gate_map_main`, `gate_map_slow`로 설치한다. 기존 A2RL 정책은 그대로 유지한다.
-시작점은 (-2, -2.8, 0.75), 게이트 좌표는 `scripts/gate_map/gate_map.yaml`을 기준으로 G1/G4 중심 높이를
-0.75 m에서 1.25 m로 올렸다. 시작 높이는 기존 0.75 m다.
-원본 파일은 수정하지 않았으며, ROS 설치용 맵에는 start/thickness와 G1/G4 높이 변경을 반영했다.
+시작점은 (-2, -2.8, 0.75), 게이트 좌표는 `scripts/gate_map/gate_map.yaml`과 같다.
+원본 파일은 수정하지 않았으며, ROS 설치용 맵에는 학습 설정의 start와 thickness만 보충했다.
 정책별 `training_map.yaml`은 원본 지도 사본이다. Downloads/zip 없이 실행 가능하다.
 
 ## 빌드
@@ -60,12 +59,9 @@ state_source 기본은 measured이며 songdo wrapper의 정책 기본은 slow다
 저장소 루트에서:
 
 ```bash
-PYTHONPATH=adr_ws/src/adr_control python3 -m adr_control.a2rl_runtime.verify --policy adr_ws/src/adr_control/policies/gate_map_slow --map adr_ws/src/adr_control/policies/gate_map_slow/training_map.yaml
+PYTHONPATH=adr_ws/src/adr_control python3 -m adr_control.a2rl_runtime.verify --policy adr_ws/src/adr_control/policies/gate_map_slow --map adr_ws/src/adr_bringup/config/maps/songdo.yaml
 ```
 
 main은 경로의 gate_map_slow를 gate_map_main으로 바꾼다. 각각 17,600개 기록 상태의
 관측·액션·추력·각속도·목표 게이트를 비교한다. 이는 재생 검증이며 실제 ROS/PX4
 완주율 검증과 다르다. 전달된 98.4%/100%는 제공자의 학습 환경 평가 결과다.
-
-재생 동등성 검증은 원본 training_map.yaml 기준이다. G1/G4가 높아진 songdo 맵에서도
-정책은 변경된 게이트 좌표를 입력받지만, 기존 완주율은 보장되지 않으며 별도 비행 검증이 필요하다.

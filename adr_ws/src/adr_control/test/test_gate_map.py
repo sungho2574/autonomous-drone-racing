@@ -13,14 +13,12 @@ MAP = SRC/'adr_bringup/config/maps/songdo.yaml'
 @pytest.mark.parametrize('name', ['gate_map_slow','gate_map_main'])
 def test_gate_map_reference(name):
     assets = SRC/'adr_control/policies'/name
-    result = verify(assets, assets/'training_map.yaml')
+    result = verify(assets, MAP)
     assert result['passed'], result
     assert result['samples'] == 17600
     mp = load_map_from_config(assets/'config_asrun.yaml', MAP)
     original = load_map_from_config(assets/'config_asrun.yaml', assets/'training_map.yaml')
-    expected = original.gate_pos.copy()
-    expected[[0, 3], 2] += 0.5
-    np.testing.assert_allclose(mp.gate_pos, expected)
+    np.testing.assert_allclose(mp.gate_pos, original.gate_pos)
     np.testing.assert_allclose(mp.bounds_lo, [-3.82,-3.82,.18])
     np.testing.assert_allclose(mp.bounds_hi, [3.82,6.82,3.32])
     np.testing.assert_allclose(mp.start_pos, [-2,-2.8,.75])
@@ -38,9 +36,6 @@ def test_gate_map_reference(name):
 def test_gate_map_world_geometry():
     data = yaml.safe_load(MAP.read_text())
     source = yaml.safe_load((SRC/'adr_control/policies/gate_map_main/training_map.yaml').read_text())
-    for gate in source['gates']:
-        if gate['id'] in (1, 4):
-            gate['z'] += 0.5
     assert data['gates'] == source['gates']
     assert data['room'] == source['room']
     tree = ET.parse(SRC/'adr_sim/assets/worlds/songdo.sdf')
