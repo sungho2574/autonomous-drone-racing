@@ -261,7 +261,7 @@ OpenVINS 진단 토픽, 시작 시 설정/맵 메타데이터, 비행 bag와 게
 bringup 양쪽에 동일한 `camera_tilt_deg:=20`을 전달합니다. 정책 관측 각도 45°와는
 별개입니다. [빌드·실행·검증 방법](docs/a2rl_rl.md)을 참고하세요.
 
-### 실내 gate_map RL
+### Songdo RL
 
-`sim.launch.py map:=gate_map`과 `gate_map_rl.launch.py policy:=gate_map_slow` 또는
-`policy:=gate_map_main`을 사용합니다. [실행·상태 입력·검증 방법](docs/gate_map_rl.md).
+`sim.launch.py map:=songdo`과 `songdo_rl.launch.py policy:=gate_map_slow` 또는
+`policy:=gate_map_main`을 사용합니다. [실행·상태 입력·검증 방법](docs/songdo_rl.md).

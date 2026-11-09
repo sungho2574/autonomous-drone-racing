@@ -1,4 +1,4 @@
-"""Indoor gate_map policy launch; policy:=gate_map_slow or gate_map_main."""
+"""Songdo policy launch; policy:=gate_map_slow or gate_map_main."""
 import importlib.util
 from pathlib import Path
 

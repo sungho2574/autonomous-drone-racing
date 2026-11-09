@@ -8,7 +8,7 @@ from adr_control.a2rl_runtime.verify import verify
 from adr_control.a2rl_runtime.gate_tracker import GateTracker
 
 SRC = Path(__file__).resolve().parents[2]
-MAP = SRC/'adr_bringup/config/maps/gate_map.yaml'
+MAP = SRC/'adr_bringup/config/maps/songdo.yaml'
 
 @pytest.mark.parametrize('name', ['gate_map_slow','gate_map_main'])
 def test_gate_map_reference(name):
@@ -38,19 +38,14 @@ def test_gate_map_world_geometry():
     source = yaml.safe_load((SRC/'adr_control/policies/gate_map_main/training_map.yaml').read_text())
     assert data['gates'] == source['gates']
     assert data['room'] == source['room']
-    tree = ET.parse(SRC/'adr_sim/assets/worlds/gate_map.sdf')
+    tree = ET.parse(SRC/'adr_sim/assets/worlds/songdo.sdf')
     includes = {n.findtext('name'): n for n in tree.findall('./world/include')}
     for g in data['gates']:
         node = includes[f"gate_{g['id']}"]
         pose = list(map(float,node.findtext('pose').split()))
         np.testing.assert_allclose(pose[:3], [g[a] for a in 'xyz'])
         assert pose[5] == pytest.approx(np.deg2rad(g['yaw_deg']),abs=1e-6)
-        assert node.findtext('uri') == 'model://adr_gate_gate_map'
+        assert node.findtext('uri') == 'model://adr_gate_songdo'
     np.testing.assert_allclose(list(map(float,includes['adr_racer'].findtext('pose').split()))[:2],[-2,-2.8])
     walls={m.get('name'):m for m in tree.findall('./world/model') if m.get('name').startswith('room_')}
-    assert len(walls) == 5
-    for name, axis, side, value in [('west',0,1,-4),('east',0,-1,4),('south',1,1,-4),('north',1,-1,7),('ceiling',2,-1,3.5)]:
-        m=walls['room_'+name]
-        pos=list(map(float,m.findtext('pose').split()))
-        size=list(map(float,m.findtext('./link/collision/geometry/box/size').split()))
-        assert pos[axis]+side*size[axis]/2 == pytest.approx(value)
+    assert not walls

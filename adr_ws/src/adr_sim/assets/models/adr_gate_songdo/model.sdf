@@ -3,7 +3,7 @@
      정사각 레이싱 게이트. 내부 1.2 m, 외부 1.5 m (프레임 폭 0.15 m), 두께 0.05 m.
      원점 = 개구부 중심, +x = 통과 방향(법선). static 이라 공중에 고정된다(다리 없음). -->
 <sdf version="1.9">
-  <model name="adr_gate_gate_map">
+  <model name="adr_gate_songdo">
     <static>true</static>
     <link name="left">
       <pose>0 0.675 0 0 0 0</pose>

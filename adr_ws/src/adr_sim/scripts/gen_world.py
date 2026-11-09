@@ -345,24 +345,6 @@ def gen_obstacles(scene: dict, rng: random.Random, r0: float, r_max: float) -> s
     return ''.join(out)
 
 
-def room_walls(room):
-    """Inner faces match the training room; wall thickness extends outward."""
-    x, y = float(room['origin_x']), float(room['origin_y'])
-    w, l, h = (float(room[k]) for k in ('width', 'length', 'height'))
-    t = .10
-    boxes = [
-        ('west', (x-t/2,y+l/2,h/2), (t,l+2*t,h)),
-        ('east', (x+w+t/2,y+l/2,h/2), (t,l+2*t,h)),
-        ('south', (x+w/2,y-t/2,h/2), (w,t,h)),
-        ('north', (x+w/2,y+l+t/2,h/2), (w,t,h)),
-        ('ceiling', (x+w/2,y+l/2,h+t/2), (w+2*t,l+2*t,t)),
-    ]
-    return ''.join(OBSTACLE_SDF.format(name='room_'+name,
-        pose=' '.join(map(str, p))+' 0 0 0',
-        geom='<box><size>'+' '.join(map(str, size))+'</size></box>',
-        r=.55,g=.58,b=.62) for name,p,size in boxes)
-
-
 def build_world(name: str, mpath: str, scene: dict, out: str, racer_model: str) -> None:
     """맵 yaml 하나 → 월드 SDF + 그 맵 전용 게이트 모델."""
     with open(mpath) as f:
@@ -383,8 +365,6 @@ def build_world(name: str, mpath: str, scene: dict, out: str, racer_model: str) 
         scene = copy.deepcopy(scene)
         scene['poles']['count'] = scene['boxes']['count'] = 0
     body = [gen_obstacles(scene, random.Random(seed), r0, r_max)]
-    if 'room' in d:
-        body.append(room_walls(d['room']))
     body += [f'\n    <!-- ===== 게이트 {len(d["gates"])}개 ({name}.yaml) — 원점 = 개구부 중심, yaw = 통과 방향 ===== -->\n']
     for g in d['gates']:
         body.append(f"""    <include>

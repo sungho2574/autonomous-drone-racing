@@ -156,7 +156,7 @@ def _check_rl(context):
     for name in ('policy.onnx', 'policy_meta.json', 'config_asrun.yaml'):
         if not (policy_dir / name).is_file():
             raise RuntimeError(f'Missing policy asset: {policy_dir / name}; rebuild adr_control')
-    expected_map = ('gate_map' if policy.startswith('gate_map_') else
+    expected_map = ('songdo' if policy.startswith('gate_map_') else
                     'a2rl_monorace' if policy == 'a2rl_monorace' else 'a2rl_monorace_v5')
     if LaunchConfiguration('map').perform(context) != expected_map:
         raise RuntimeError(f'Policy {policy} requires map:={expected_map} in both sim and bringup')
@@ -266,7 +266,7 @@ def generate_launch_description(controller='position', default_policy='A_slow'):
         DeclareLaunchArgument('record_root', default_value=''),
         DeclareLaunchArgument('vio_timing_path', default_value=''),
         # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
-        DeclareLaunchArgument('map', default_value=PythonExpression(["'gate_map' if '", LaunchConfiguration('policy'), "' in ('gate_map_main', 'gate_map_slow') else ('a2rl_monorace' if '", LaunchConfiguration('policy'), "' == 'a2rl_monorace' else 'a2rl_monorace_v5')"]) if controller == 'a2rl' else 'cross'),
+        DeclareLaunchArgument('map', default_value=PythonExpression(["'songdo' if '", LaunchConfiguration('policy'), "' in ('gate_map_main', 'gate_map_slow') else ('a2rl_monorace' if '", LaunchConfiguration('policy'), "' == 'a2rl_monorace' else 'a2rl_monorace_v5')"]) if controller == 'a2rl' else 'cross'),
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
         DeclareLaunchArgument('show_planned_path', default_value='false' if controller == 'a2rl' else 'true'),
         DeclareLaunchArgument('v_avg', default_value='3.0'),

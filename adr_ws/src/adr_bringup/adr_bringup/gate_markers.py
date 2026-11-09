@@ -6,13 +6,14 @@
   /adr/flown_path     nav_msgs/Path                              TF map→base_link 를 주기적으로 샘플링
 """
 import os
+import yaml
 from math import cos, sin
 
 import rclpy
 from adr_msgs.msg import Gate as GateMsg
 from adr_msgs.msg import GateArray
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import Path
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -46,6 +47,8 @@ class GateMarkers(Node):
         self.frame_id = self.get_parameter('frame_id').value
         self.base_frame = self.get_parameter('base_frame').value
         self.course = load_course(gates_file)
+        with open(gates_file) as stream:
+            self.room = yaml.safe_load(stream).get("room")
 
         self.marker_pub = self.create_publisher(MarkerArray, '/adr/gate_markers', LATCHED)
         self.gates_pub = self.create_publisher(GateArray, '/adr/gates', LATCHED)
@@ -151,6 +154,29 @@ class GateMarkers(Node):
         start.scale.z = 0.02
         start.color.r, start.color.g, start.color.b, start.color.a = 0.2, 0.4, 1.0, 0.8
         arr.markers.append(start)
+        if self.room:
+            room = self.room
+            xs = [float(room['origin_x']), float(room['origin_x']) + float(room['width'])]
+            ys = [float(room['origin_y']), float(room['origin_y']) + float(room['length'])]
+            zs = [0.0, float(room['height'])]
+            guide = Marker()
+            guide.header.frame_id, guide.header.stamp = self.frame_id, stamp
+            guide.ns, guide.id = 'room_bounds', 0
+            guide.type, guide.action = Marker.LINE_LIST, Marker.ADD
+            guide.pose.orientation.w = 1.0
+            guide.scale.x = 0.025
+            guide.color.r, guide.color.g, guide.color.b, guide.color.a = 0.4, 0.75, 1.0, 0.65
+            # Four edges parallel to each axis: 12 edges, no solid surfaces.
+            for y in ys:
+                for z in zs:
+                    guide.points.extend([Point(x=x, y=y, z=z) for x in xs])
+            for x in xs:
+                for z in zs:
+                    guide.points.extend([Point(x=x, y=y, z=z) for y in ys])
+            for x in xs:
+                for y in ys:
+                    guide.points.extend([Point(x=x, y=y, z=z) for z in zs])
+            arr.markers.append(guide)
         return arr
 
     def _on_path_timer(self):
