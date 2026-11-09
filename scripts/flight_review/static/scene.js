@@ -3,7 +3,6 @@ import { OrbitControls } from "./vendor/three/OrbitControls.js";
 import { LineSegments2 } from "./vendor/three/LineSegments2.js";
 import { LineSegmentsGeometry } from "./vendor/three/LineSegmentsGeometry.js";
 import { LineMaterial } from "./vendor/three/LineMaterial.js";
-import { upperBound } from "./timeline.mjs";
 import { samplePose } from "./pose.mjs";
 export const paths = {
   plan: { name: "Plan", color: "#81c784" },
@@ -48,11 +47,10 @@ export class FlightScene {
     for (const [key, info] of Object.entries(paths)) {
       const rows = data.trajectories[key] || [],
         group = new THREE.Group(),
-        vertices = [], segmentTimes = [];
+        vertices = [];
       const maxGap = key === "plan" ? data.plan_max_gap_s : 0.3;
       for (let i = 1; i < rows.length; i++) {
         if (rows[i][0] - rows[i - 1][0] > maxGap) continue;
-        segmentTimes.push(rows[i][0]);
         vertices.push(...rows[i - 1].slice(1, 4), ...rows[i].slice(1, 4));
       }
       const geometry = new LineSegmentsGeometry();
@@ -112,8 +110,6 @@ export class FlightScene {
       };
       this.items[key] = {
         rows,
-        geometry,
-        segmentTimes,
         group,
         marker,
         axes,
@@ -295,17 +291,9 @@ export class FlightScene {
     });
     this.render();
   }
-  setHistory(enabled) {
-    this.history = enabled;
-    this.setTime(this.time ?? this.data.initial_time);
-  }
   setTime(t) {
     this.time = t;
-    this.pnpMarks.geometry.setDrawRange(0, 4 * (this.history
-      ? upperBound(this.pnpRows, t, row => row[0]) : this.pnpRows.length));
     for (const [key, item] of Object.entries(this.items)) {
-      item.geometry.instanceCount = this.history && (key !== "plan" || this.data.plan_time_aligned)
-        ? upperBound(item.segmentTimes, t) : item.segmentTimes.length;
       const pose =
         key === "plan" && !this.data.plan_time_aligned
           ? null

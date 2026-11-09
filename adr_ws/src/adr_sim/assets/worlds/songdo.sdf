@@ -80,7 +80,7 @@
     <include>
       <uri>model://adr_gate_songdo</uri>
       <name>gate_1</name>
-      <pose>-2.0 -1.0 0.75 0 0 1.570796</pose>
+      <pose>-2.0 -1.0 1.25 0 0 1.570796</pose>
     </include>
     <include>
       <uri>model://adr_gate_songdo</uri>
@@ -95,7 +95,7 @@
     <include>
       <uri>model://adr_gate_songdo</uri>
       <name>gate_4</name>
-      <pose>2.0 -1.0 0.75 0 0 4.712389</pose>
+      <pose>2.0 -1.0 1.25 0 0 4.712389</pose>
     </include>
 
     <!-- ===== 드론 (start 지점 바닥, PX4 는 PX4_GZ_MODEL_NAME=adr_racer 로 붙는다) ===== -->
