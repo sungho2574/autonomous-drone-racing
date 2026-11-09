@@ -120,3 +120,17 @@ def test_noise_error_structure():
     assert np.median(depth) < 0.03, f'깊이 오차 {np.median(depth):.3f} m — 스케일이 틀어졌다'
     assert np.median(lateral) < 0.20, \
         f'횡방향 오차 {np.median(lateral):.3f} m — solver 를 전부 돌리고 있는지 확인할 것'
+
+
+def test_songdo_recorded_bad_pose():
+    from scipy.spatial.transform import Rotation
+    from adr_perception.pnp import attitude_error_deg
+    corners = np.array([[382,232],[422,234],[427,286],[385,285]], dtype=float)
+    K = np.array([[319.9987793,0,320],[0,319.99880791,240],[0,0,1]])
+    T, err = drone_pose_in_map(corners,1.2,K,None,[0,4,2.25],np.pi/2,
+                               camera_extrinsic([.045,0,.022],20))
+    reference = Rotation.from_euler('z',90,degrees=True).as_matrix()
+    assert err < 3  # Reprojection alone incorrectly accepts this recording.
+    assert attitude_error_deg(reference,T[:3,:3]) > 15
+    assert np.linalg.norm(T[:3,3] - [-2.007,-2.804,.202]) > 1
+    assert attitude_error_deg(reference,reference) < 1e-5

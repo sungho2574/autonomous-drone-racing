@@ -43,7 +43,7 @@ from adr_perception.projection_overlay import draw_projection
 from std_msgs.msg import Float32, Int32
 from visualization_msgs.msg import Marker
 
-from adr_perception.pnp import camera_extrinsic, drone_pose_in_map, quat_from_R
+from adr_perception.pnp import camera_extrinsic, drone_pose_in_map, quat_from_R, attitude_error_deg
 from adr_planning.course import load_course
 
 SENSOR_QOS = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -63,9 +63,10 @@ class GatePnP(Node):
         self.declare_parameter('cam_xyz', [0.045, 0.0, 0.022])
         self.declare_parameter('cam_tilt_deg', 20.0)        # 위쪽 틸트(+). racer_spec.yaml 의 camera.tilt_deg 와 같아야 함
         self.declare_parameter('max_reproj_px', 3.0)        # 재투영오차 상한
-        # 이미지 시각 GT prior와 이만큼 넘게 벌어지면 '다른 게이트를 본 것'으로 보고 버린다.
-        # PnP 오차(수십 cm)보다 훨씬 크게 잡아 성능 측정을 왜곡하지 않게 한다. 0 이면 끔.
-        self.declare_parameter('max_odom_gap', 5.0)  # historical name: measured against the configured pose prior
+        # Absolute position discrepancy from the configured image-time pose prior.
+        self.declare_parameter('max_odom_gap', 1.0)  # historical name: measured against the configured pose prior
+        self.declare_parameter('max_attitude_error_deg', 15.0)
+        self.declare_parameter('min_quality', 0.1)
         self.declare_parameter('prior_topic', '/adr/odom')
         self.declare_parameter('prior_max_gap_s', 0.2)
         self.declare_parameter('prior_wait_s', 0.25)
@@ -86,6 +87,10 @@ class GatePnP(Node):
                                            float(self.get_parameter('cam_tilt_deg').value))
         self.max_reproj = float(self.get_parameter('max_reproj_px').value)
         self.max_gap = float(self.get_parameter('max_odom_gap').value)
+        self.max_attitude_error = float(self.get_parameter('max_attitude_error_deg').value)
+        self.min_quality = float(self.get_parameter('min_quality').value)
+        if not (0 < self.max_attitude_error <= 180 and 0 <= self.min_quality <= 1 and np.isfinite(self.max_gap) and self.max_gap > 0):
+            raise ValueError('Invalid PnP acceptance thresholds')
         self.d_min = float(self.get_parameter('quality_dist_min').value)
         self.d_max = float(self.get_parameter('quality_dist_max').value)
 
@@ -213,7 +218,7 @@ class GatePnP(Node):
     def _diagnostic(self, msg, reason, match=None, selected=0):
         codes = {'accepted': 0, 'no_prior': 1, 'no_corners': 2, 'no_visible_gate': 3,
                  'absolute_error': 4, 'ambiguous': 5, 'duplicate_id': 6,
-                 'pnp_reprojection': 7, 'pnp_innovation': 8, 'no_camera': 9}
+                 'pnp_reprojection': 7, 'pnp_innovation': 8, 'no_camera': 9, 'pnp_attitude': 10, 'pnp_quality': 11}
         values = {'pnp_assoc_reason': codes[reason], 'pnp_assoc_selected_id': selected,
                   'pnp_assoc_accepted': int(reason == 'accepted')}
         if match:
@@ -285,6 +290,17 @@ class GatePnP(Node):
                                      f'게이트 {g.id} 이 아닌 다른 게이트를 봤을 가능성')
                 return
 
+        attitude_error = attitude_error_deg(prior[:3, :3], T[:3, :3])
+        if attitude_error > self.max_attitude_error:
+            self._diagnostic(msg, 'pnp_attitude', match)
+            return
+        dist = float(np.linalg.norm(p - g.center))
+        q_rep = max(0.0, 1.0 - err / self.max_reproj) if self.max_reproj > 0 else 1.0
+        q_dist = float(np.clip((self.d_max - dist) / max(self.d_max - self.d_min, 1e-6), 0.0, 1.0))
+        quality = float(np.clip(q_rep * q_dist, 0.0, 1.0))
+        if quality < self.min_quality:
+            self._diagnostic(msg, 'pnp_quality', match)
+            return
         self._diagnostic(msg, 'accepted', match, int(g.id))
         self.n_ok += 1
         q = quat_from_R(T[:3, :3])
@@ -297,16 +313,12 @@ class GatePnP(Node):
         self.pose_pub.publish(ps)
         self.gate_pub.publish(Int32(data=int(g.id)))
 
-        # drift 보정 KF 용 측정값. 회전은 싣지 않는다 (논문 §2.2 — PnP 회전은 폐기).
-        # quality: 재투영오차와 거리 둘 다 좋을수록 1 에 가깝게. KF 가 R 스케일에 쓴다.
-        dist = float(np.linalg.norm(p - g.center))
-        q_rep = max(0.0, 1.0 - err / self.max_reproj) if self.max_reproj > 0 else 1.0
-        q_dist = float(np.clip((self.d_max - dist) / max(self.d_max - self.d_min, 1e-6), 0.0, 1.0))
+        # Publish only after position, attitude and quality checks pass.
         m = GatePnPMsg()
         m.header = ps.header
         m.gate_id = int(g.id)
         m.pos_w.x, m.pos_w.y, m.pos_w.z = map(float, p)
-        m.quality = float(np.clip(q_rep * q_dist, 0.0, 1.0))
+        m.quality = quality
         m.reproj_px = float(err)
         m.distance_m = dist
         self.gatepnp_pub.publish(m)

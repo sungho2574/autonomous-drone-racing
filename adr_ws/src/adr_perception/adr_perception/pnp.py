@@ -134,3 +134,11 @@ def drone_pose_in_map(corners_px, inner_size, K, dist, gate_center, gate_yaw, T_
 def quat_from_R(R: np.ndarray):
     """회전행렬 → 쿼터니언 (x, y, z, w) — ROS geometry_msgs 순서."""
     return Rotation.from_matrix(np.asarray(R, dtype=float)).as_quat()
+
+
+def attitude_error_deg(reference, estimate):
+    """SO(3) rotation distance; includes roll/pitch/yaw, safe across yaw wrap."""
+    a, b = np.asarray(reference), np.asarray(estimate)
+    if not (np.isfinite(a).all() and np.isfinite(b).all()):
+        return float('inf')
+    return float(np.degrees(np.arccos(np.clip((np.trace(a.T @ b) - 1) / 2, -1, 1))))

@@ -117,7 +117,7 @@ def test_outlier_preserves_state_and_recovers():
 
 
 def test_uncertainty_allows_reacquisition():
-    certain, uncertain = DriftKF(p0_pos=0.01), DriftKF(p0_pos=0.01)
+    certain, uncertain = DriftKF(p0_pos=0.01, max_position_residual=3), DriftKF(p0_pos=0.01, max_position_residual=3)
     uncertain.predict(10, hold=True)
     assert certain.update([2, 0, 0], [0, 0, 0]) is None
     assert uncertain.update([2, 0, 0], [0, 0, 0]) is not None
@@ -133,5 +133,29 @@ def test_invalid_measurement_does_not_poison_filter(position, quality):
 
 
 def test_gate_can_be_disabled():
-    kf = DriftKF(innovation_gate=0)
+    kf = DriftKF(innovation_gate=0, max_position_residual=20)
     assert kf.update([10, 0, 0], [0, 0, 0]) is not None
+
+
+def test_absolute_guard_survives_large_covariance():
+    kf = DriftKF(p0_pos=1000)
+    before_x, before_p = kf.x.copy(), kf.P.copy()
+    assert kf.update([2, 0, 0], [0, 0, 0]) is None
+    assert kf.last_rejection == 'position_residual'
+    np.testing.assert_array_equal(kf.x, before_x)
+    np.testing.assert_array_equal(kf.P, before_p)
+
+
+def test_songdo_initial_measurements_rejected():
+    kf = DriftKF()
+    for p, q in [([-4.974,-1.702,1.367],.041), ([-4.945,-1.858,1.438],.029)]:
+        assert kf.update(p, [-1.998,-2.801,.11], q) is None
+        assert kf.last_rejection == 'low_quality'
+    np.testing.assert_array_equal(kf.x, np.zeros(6))
+    assert kf.update([.2,0,0], [0,0,0], .8) is not None
+
+
+def test_absolute_guard_uses_corrected_position():
+    kf = DriftKF()
+    kf.x[:3] = [3,0,0]
+    assert kf.update([3.2,0,0], [0,0,0], .8) is not None

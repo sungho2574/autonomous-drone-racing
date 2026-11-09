@@ -57,6 +57,8 @@ class DriftCorrector(Node):
         # 이 코스는 게이트 사이 ~2 초라 그보다 넉넉히 잡는다. (논문에 없는 처리 — drift_kf.predict 주석 참고)
         self.declare_parameter('hold_timeout', 2.5)
         self.declare_parameter('innovation_gate', 7.81)  # 3D NIS threshold; 0 disables
+        self.declare_parameter('min_quality', 0.1)
+        self.declare_parameter('max_position_residual', 1.0)
         self.declare_parameter('v_max', 0.5)            # drift 속도 상한 [m/s]
         self.declare_parameter('path_max_points', 6000)
 
@@ -66,7 +68,9 @@ class DriftCorrector(Node):
                           sigma_r=self.get_parameter('sigma_r').value,
                           lambda_r=float(self.get_parameter('lambda_r').value),
                           v_max=float(self.get_parameter('v_max').value),
-                          innovation_gate=float(self.get_parameter('innovation_gate').value))
+                          innovation_gate=float(self.get_parameter('innovation_gate').value),
+                          min_quality=float(self.get_parameter('min_quality').value),
+                          max_position_residual=float(self.get_parameter('max_position_residual').value))
         self.tau_min = float(self.get_parameter('tau_d_min').value)
         self.tau_max = float(self.get_parameter('tau_d_max').value)
         self.max_dt = float(self.get_parameter('max_dt').value)
@@ -197,7 +201,7 @@ class DriftCorrector(Node):
                 continue
             z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
             accepted = self.timed.update(t, z, p_vio, m.quality)
-            self._decision(m, accepted, "accepted" if accepted else "innovation_or_invalid")
+            self._decision(m, accepted, "accepted" if accepted else (self.kf.last_rejection or "time_order"))
 
     def _decision(self, m, accepted, reason):
         self.decision_pub.publish(String(data=json.dumps(dict(

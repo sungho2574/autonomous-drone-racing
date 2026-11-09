@@ -375,7 +375,7 @@ function renderCharts(all) {
       ["pnp_assoc_best_px", "pnp_assoc_second_px", "pnp_assoc_max_corner_px", "pnp_assoc_limit_px", "pnp_assoc_margin_px"]],
     ["게이트 ID 매칭 결과", "ID", "주행 목표와 관측 ID는 별개입니다. 채택 ID 0은 보정하지 않은 프레임입니다.",
       ["pnp_assoc_selected_id", "pnp_assoc_best_id", "pnp_assoc_second_id"]],
-    ["게이트 매칭 판정", "code", "0 채택 · 1 prior 없음 · 2 코너 없음 · 3 가시 게이트 없음 · 4 절대 오차 · 5 후보 모호 · 6 검출 중복 · 7 재투영 오차 · 8 위치 innovation · 9 카메라 정보 없음",
+    ["게이트 매칭 판정", "code", "0 채택 · 1 prior 없음 · 2 코너 없음 · 3 가시 게이트 없음 · 4 절대 오차 · 5 후보 모호 · 6 검출 중복 · 7 재투영 오차 · 8 위치 innovation · 9 카메라 정보 없음 · 10 자세 불일치 · 11 낮은 품질",
       ["pnp_assoc_reason", "pnp_assoc_accepted"]],
     ["PnP 품질", "score", "게이트 PnP가 발행하는 품질 지표", ["pnp_quality"]],
     [

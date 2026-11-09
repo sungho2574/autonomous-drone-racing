@@ -65,3 +65,12 @@ PYTHONPATH=adr_ws/src/adr_control python3 -m adr_control.a2rl_runtime.verify --p
 main은 경로의 gate_map_slow를 gate_map_main으로 바꾼다. 각각 17,600개 기록 상태의
 관측·액션·추력·각속도·목표 게이트를 비교한다. 이는 재생 검증이며 실제 ROS/PX4
 완주율 검증과 다르다. 전달된 98.4%/100%는 제공자의 학습 환경 평가 결과다.
+
+## PnP 보정 보호 조건
+
+- gate_pnp: 이미지 시각 prior 대비 위치 오차 1 m 이하, 전체 자세 차이 15도 이하, 품질 0.1 이상이어야 발행한다.
+- drift_corrector: 품질 0.1 미만 또는 예측된 보정 VIO 위치 대비 잔차 1 m 초과면 KF 갱신을 기각한다. NIS 검사도 유지한다.
+- 설정: gate_pnp.yaml의 max_odom_gap / max_attitude_error_deg / min_quality, drift_corrector.yaml의 max_position_residual / min_quality.
+- association 판정 코드 10은 자세 불일치, 11은 낮은 품질. KF decision에는 low_quality / position_residual / innovation을 기록한다.
+- 현재 prior_topic 기본은 /adr/odom이다. 따라서 기본 자세 검사는 VIO만을 이용하는 구성이 아니며 해당 토픽의 기준 자세를 사용한다.
+- 절대 잔차 상한은 누적 오차가 1 m를 넘었을 때 재획득도 제한한다. 임계값은 초기 보수적 설정이며 실제 비행 검증이 필요하다.
