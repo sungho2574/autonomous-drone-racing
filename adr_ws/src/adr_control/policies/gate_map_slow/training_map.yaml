@@ -1,0 +1,26 @@
+# Units: metres / degrees. G2/G3 are at XY (0, 4); +Z points up.
+room:
+  origin_x: -4.0            # Room minimum X (old coordinates shifted by -4)
+  origin_y: -4.0            # Room minimum Y (original coordinates shifted by -4)
+  width: 8.0                 # X
+  length: 11.0               # Y
+  height: 3.5                # Z
+
+gate:
+  outer_size: 1.5
+  inner_size: 1.2            # 15 cm border on each side, filled inward
+
+# Illustrative centreline, not a dynamically validated flight trajectory.
+route:
+  order: [1, 2, 3, 4]
+  closed: true              # Return from G4 to G1
+  handle_length: 1.8        # Bezier control distance along gate passage normals
+
+# Position = centre of gate. yaw_deg = passage normal, CCW from +X.
+# G1, G3 and G4 rest on the floor (centre Z = outer_size / 2).
+# G2 sits directly on G3 at (0, 4), facing the opposite passage direction.
+gates:
+  - {id: 1, x: -2.0, y: -1.0, z: 0.75, yaw_deg: 90}
+  - {id: 2, x: 0.0, y: 4.0, z: 2.25, yaw_deg: 90}
+  - {id: 3, x: 0.0, y: 4.0, z: 0.75, yaw_deg: 270}
+  - {id: 4, x: 2.0, y: -1.0, z: 0.75, yaw_deg: 270}

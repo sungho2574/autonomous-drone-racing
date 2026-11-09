@@ -150,13 +150,14 @@ def _check_rl(context):
     if source == 'measured' and LaunchConfiguration('vio').perform(context).lower() not in ('true', '1'):
         raise RuntimeError('state_source:=measured requires vio:=true')
     policy = LaunchConfiguration('policy').perform(context)
-    if policy not in ('a2rl_monorace', 'A_slow', 'B_fast'):
-        raise RuntimeError('policy must be a2rl_monorace, A_slow or B_fast')
+    if policy not in ('a2rl_monorace', 'A_slow', 'B_fast', 'gate_map_main', 'gate_map_slow'):
+        raise RuntimeError('policy must be a2rl_monorace, A_slow, B_fast, gate_map_main or gate_map_slow')
     policy_dir = Path(get_package_share_directory('adr_control')) / 'policies' / policy
     for name in ('policy.onnx', 'policy_meta.json', 'config_asrun.yaml'):
         if not (policy_dir / name).is_file():
             raise RuntimeError(f'Missing policy asset: {policy_dir / name}; rebuild adr_control')
-    expected_map = 'a2rl_monorace' if policy == 'a2rl_monorace' else 'a2rl_monorace_v5'
+    expected_map = ('gate_map' if policy.startswith('gate_map_') else
+                    'a2rl_monorace' if policy == 'a2rl_monorace' else 'a2rl_monorace_v5')
     if LaunchConfiguration('map').perform(context) != expected_map:
         raise RuntimeError(f'Policy {policy} requires map:={expected_map} in both sim and bringup')
     if (float(LaunchConfiguration('time_scale').perform(context)) != 1.0
@@ -169,7 +170,7 @@ def _check_rl(context):
     return []
 
 
-def generate_launch_description(controller='position'):
+def generate_launch_description(controller='position', default_policy='A_slow'):
     bringup_share = get_package_share_directory('adr_bringup')
     # map:= → config/maps/<맵>.yaml. PathJoinSubstitution 은 Substitution 하나로 평가되므로
     # 파라미터가 문자열 배열로 잘못 해석될 여지가 없다.
@@ -244,7 +245,7 @@ def generate_launch_description(controller='position'):
     return LaunchDescription([
         DeclareLaunchArgument('camera_tilt_deg', default_value='20.0'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        *([DeclareLaunchArgument('policy', default_value='A_slow'),
+        *([DeclareLaunchArgument('policy', default_value=default_policy),
            DeclareLaunchArgument('rl_position_topic', default_value='/adr/state/corrected'),
            DeclareLaunchArgument('state_source', default_value='measured',
               description='RL input: gt or measured (selected VIO/PnP position + PX4 velocity/attitude/rates)')]
@@ -265,7 +266,7 @@ def generate_launch_description(controller='position'):
         DeclareLaunchArgument('record_root', default_value=''),
         DeclareLaunchArgument('vio_timing_path', default_value=''),
         # 맵 = 코스 정의의 단일 진실 원천. planner/markers/pnp 로, 그리고 vio 의 gz IMU 토픽 경로(월드 이름)로 간다.
-        DeclareLaunchArgument('map', default_value=PythonExpression(["'a2rl_monorace' if '", LaunchConfiguration('policy'), "' == 'a2rl_monorace' else 'a2rl_monorace_v5'"]) if controller == 'a2rl' else 'cross'),
+        DeclareLaunchArgument('map', default_value=PythonExpression(["'gate_map' if '", LaunchConfiguration('policy'), "' in ('gate_map_main', 'gate_map_slow') else ('a2rl_monorace' if '", LaunchConfiguration('policy'), "' == 'a2rl_monorace' else 'a2rl_monorace_v5')"]) if controller == 'a2rl' else 'cross'),
         # 궤적 공격성. 빈 값이면 planner.yaml 값을 쓴다 — 논문 트랙처럼 코너가 급한 맵은 낮춰야 한다.
         DeclareLaunchArgument('show_planned_path', default_value='false' if controller == 'a2rl' else 'true'),
         DeclareLaunchArgument('v_avg', default_value='3.0'),

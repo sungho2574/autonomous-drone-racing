@@ -79,7 +79,16 @@ class MapGeom:
     """
 
     def __init__(self, path, *, virtual_gate_ids=(5, 6, 10, 12), inflate=0.134,
-                 bounds_margin=3.0, z_min=0.0, z_max=6.0, loop=True, extra_xy=()):
+                 bounds_margin=3.0, z_min=0.0, z_max=6.0, loop=True, extra_xy=(),
+                 wall_clear=0.0, start_xyz=None, gate_thickness=None):
+        """`start_xyz` / `gate_thickness` / `wall_clear` 는 **설정에서 오는 값**이다.
+
+        `maps/gate_map.yaml` 은 성호의 OpenVINS+PnP 쪽과 **글자 하나까지 같은 파일**
+        이라 학습 전용 키(start, thickness)를 넣지 않았다. 맵에 그 블록이 있으면
+        (옛 big_track / A2RL 맵) 맵 값을 쓰고, 없으면 여기 인자로 받는다.
+        `load_map_from_config()` 가 `config_asrun.yaml` 의 `track:` 에서 자동으로
+        채워 주므로 보통은 신경 쓸 필요가 없다.
+        """
         with open(path, "r", encoding="utf-8") as fh:
             raw = yaml.safe_load(fh)
         gates = raw["gates"]
@@ -108,7 +117,10 @@ class MapGeom:
         g = raw["gate"]
         self.inner = float(g["inner_size"])
         self.outer = float(g["outer_size"])
-        self.thickness = float(g.get("thickness", 0.05))
+        # 맵의 thickness > 설정의 gate_thickness > 기본 0.05 (학습 track.py 와 같은 순서)
+        self.thickness = float(
+            g["thickness"] if "thickness" in g
+            else (gate_thickness if gate_thickness is not None else 0.05))
         self.inflate = float(inflate)
         self.pass_half = 0.5 * self.inner - self.inflate
         self.frame_half = 0.5 * self.outer + self.inflate
@@ -153,18 +165,54 @@ class MapGeom:
         self.virtual_mask = np.array([gid in virt for gid in self.gate_ids], dtype=bool)
         self.solid_idx = np.nonzero(~self.virtual_mask)[0]
 
-        st = raw["start"]
-        self.start_pos = np.array([float(st["x"]), float(st["y"]),
-                                   float(st["takeoff_z"])])
+        # 이륙 지점. 맵에 start: 가 있으면 그것, 없으면 설정의 track.start.
+        st = raw.get("start")
+        if st is None:
+            st = start_xyz
+        if st is None:
+            raise ValueError(
+                f"이륙 지점이 없다: {path} 에 start: 블록이 없고 설정에도 "
+                f"track.start 가 없다. 둘 중 하나는 있어야 한다.")
+        if isinstance(st, dict):
+            sx, sy, sz = float(st["x"]), float(st["y"]), float(st["takeoff_z"])
+        else:
+            sx, sy, sz = (float(v) for v in st)
+        self.start_pos = np.array([sx, sy, sz])
 
-        all_xy = [pos[:, 0:2], self.start_pos[None, 0:2]]
-        if len(extra_xy):
-            all_xy.append(np.asarray(extra_xy, dtype=float).reshape(-1, 2))
-        all_xy = np.vstack(all_xy)
-        self.bounds_lo = np.array([all_xy[:, 0].min() - bounds_margin,
-                                   all_xy[:, 1].min() - bounds_margin, z_min])
-        self.bounds_hi = np.array([all_xy[:, 0].max() + bounds_margin,
-                                   all_xy[:, 1].max() + bounds_margin, z_max])
+        # 코스 바운딩 박스. 학습 `racing_env/track.py` 와 같은 두 모드다.
+        #
+        # (a) `room:` 이 있는 맵 (gate_map = 실내 실비행 트랙) — 방이 **물리적인
+        #     벽**이다. 벽 4 면 / 천장 / 바닥을 그대로 경계로 쓰고 `wall_clear`
+        #     (기체 반폭) 만큼 안으로 줄인다. 질점 판정을 반경 r 구 판정으로
+        #     만드는 것이고, 게이트 쪽 `inflate` 와 같은 규칙이다.
+        #     bounds_margin / z_min / z_max 는 쓰지 않는다.
+        # (b) `room:` 이 없는 맵 (big_track, A2RL) — 게이트 + 이륙 지점의
+        #     바운딩 박스 + bounds_margin 이 가상 울타리다 (종전과 동일).
+        self.wall_clear = float(wall_clear)
+        room = raw.get("room")
+        self.room = None
+        if room is not None:
+            ox, oy = float(room["origin_x"]), float(room["origin_y"])
+            lo = np.array([ox, oy, 0.0])
+            hi = np.array([ox + float(room["width"]),
+                           oy + float(room["length"]),
+                           float(room["height"])])
+            c = self.wall_clear
+            if np.any(hi - lo <= 2.0 * c):
+                raise ValueError(f"wall_clear({c}) 가 방 크기의 절반 이상이다")
+            self.room = dict(lo=lo, hi=hi)
+            self.room_lo, self.room_hi = lo, hi
+            self.bounds_lo, self.bounds_hi = lo + c, hi - c
+        else:
+            all_xy = [pos[:, 0:2], self.start_pos[None, 0:2]]
+            if len(extra_xy):
+                all_xy.append(np.asarray(extra_xy, dtype=float).reshape(-1, 2))
+            all_xy = np.vstack(all_xy)
+            self.bounds_lo = np.array([all_xy[:, 0].min() - bounds_margin,
+                                       all_xy[:, 1].min() - bounds_margin, z_min])
+            self.bounds_hi = np.array([all_xy[:, 0].max() + bounds_margin,
+                                       all_xy[:, 1].max() + bounds_margin, z_max])
+            self.room_lo, self.room_hi = self.bounds_lo, self.bounds_hi
 
         self.loop = bool(loop)
         self.num_segments = G if self.loop else G - 1
@@ -179,12 +227,20 @@ class MapGeom:
         return self.gate_ids.index(int(gate_id))
 
     def describe(self):
-        return (f"map {self.path}\n게이트 {self.num_gates} ids={self.gate_ids}\n"
-                f"inner/outer {self.inner}/{self.outer} inflate {self.inflate} "
-                f"pass_half {self.pass_half:.3f}\n"
-                f"bounds {np.round(self.bounds_lo,2).tolist()} ~ "
-                f"{np.round(self.bounds_hi,2).tolist()}\n"
-                f"panels {[(self.gate_ids[i], p) for i, p in enumerate(self.panel_of) if p]}")
+        L = [f"map {self.path}",
+             f"게이트 {self.num_gates} ids={self.gate_ids}",
+             f"inner/outer {self.inner}/{self.outer} inflate {self.inflate} "
+             f"pass_half {self.pass_half:.3f}",
+             f"start {np.round(self.start_pos, 3).tolist()}",
+             f"bounds {np.round(self.bounds_lo,2).tolist()} ~ "
+             f"{np.round(self.bounds_hi,2).tolist()}"]
+        if self.room is not None:
+            L.append(f"room(벽) {np.round(self.room['lo'],2).tolist()} ~ "
+                     f"{np.round(self.room['hi'],2).tolist()}  "
+                     f"wall_clear={self.wall_clear}")
+        pn = [(self.gate_ids[i], p) for i, p in enumerate(self.panel_of) if p]
+        L.append(f"panels {pn}")
+        return "\n".join(L)
 
 
 def load_map(path, **kw):
@@ -211,7 +267,12 @@ def load_map_from_config(config_yaml, map_yaml=None, repo_root=None):
                    z_min=float(t["z_min"]), z_max=float(t["z_max"]),
                    loop=bool(t["loop"]),
                    extra_xy=[tuple(float(v) for v in q)
-                             for q in (t.get("extra_xy") or ())])
+                             for q in (t.get("extra_xy") or ())],
+                   # gate_map 전용 — 맵이 성호 쪽과 공유 파일이라 학습 전용 키가
+                   # 설정에만 있다. 옛 설정(A2RL/big_track)에는 없으므로 기본값.
+                   wall_clear=float(t.get("wall_clear", 0.0)),
+                   start_xyz=t.get("start"),
+                   gate_thickness=t.get("gate_thickness"))
 
 
 # ------------------------------------------------------------------- 관측 생성

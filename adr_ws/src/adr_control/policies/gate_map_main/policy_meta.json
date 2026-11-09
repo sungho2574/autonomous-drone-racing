@@ -1,0 +1,46 @@
+{
+  "name": "main",
+  "note": "best.zip = 25M 스냅샷 (가중치가 step_25M.zip 과 동일). 주 정책. 64기·DR on·2랩: 완주 98.4 % · 랩 5.52 s · 최고 5.69 m/s (게이트 9회 통과 기준). 게이트 8회 기준 표에서는 완주 100 % · 랩 5.29 s. 자세한 표는 eval_gatemap.md.",
+  "ckpt": "runs/gatemap_s2_A/ckpt/best.zip",
+  "config": "config_asrun.yaml",
+  "map": "maps/gate_map.yaml",
+  "obs_dim": 21,
+  "act_dim": 4,
+  "obs_normalization": null,
+  "policy_hz": 50.0,
+  "mass_nominal_kg": 0.8,
+  "a_max_g": 4.0,
+  "max_body_rate_rad_s": [
+    10.0,
+    10.0,
+    7.0
+  ],
+  "gate_ids": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "camera_uptilt_deg_train_range": [
+    40.0,
+    50.0
+  ],
+  "thrust_from_action": "mass*(G + (a_max_g-1)*G*clip(a0,0,1) + G*clip(a0,-1,0))",
+  "G": 9.81,
+  "equivalence_max_err": 1.7881393432617188e-07,
+  "runtime_obs_max_err": 0.0,
+  "runtime_thrust_max_err_n": 0.0,
+  "runtime_rates_max_err_rad_s": 0.0,
+  "gate_seq_mismatch": [
+    0,
+    17600
+  ],
+  "gate_passes_recorded": [
+    64,
+    61,
+    64,
+    64
+  ],
+  "lap_wraps_recorded": 64,
+  "pass": true
+}

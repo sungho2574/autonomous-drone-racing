@@ -1,0 +1,46 @@
+{
+  "name": "slow",
+  "note": "step_5M.zip. 보수 정책 = 첫 실비행 후보 (완주 100 % 중 랩타임 최장). 64기·DR on·2랩: 완주 100.0 % · 랩 13.82 s · 최고 2.47 m/s · 사망 0 (게이트 9회 통과 기준). 게이트 8회 기준 표에서는 랩 12.41 s. 자세한 표는 eval_gatemap.md.",
+  "ckpt": "runs/gatemap_s2_A/ckpt/step_5M.zip",
+  "config": "config_asrun.yaml",
+  "map": "maps/gate_map.yaml",
+  "obs_dim": 21,
+  "act_dim": 4,
+  "obs_normalization": null,
+  "policy_hz": 50.0,
+  "mass_nominal_kg": 0.8,
+  "a_max_g": 4.0,
+  "max_body_rate_rad_s": [
+    10.0,
+    10.0,
+    7.0
+  ],
+  "gate_ids": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "camera_uptilt_deg_train_range": [
+    40.0,
+    50.0
+  ],
+  "thrust_from_action": "mass*(G + (a_max_g-1)*G*clip(a0,0,1) + G*clip(a0,-1,0))",
+  "G": 9.81,
+  "equivalence_max_err": 2.086162567138672e-07,
+  "runtime_obs_max_err": 0.0,
+  "runtime_thrust_max_err_n": 0.0,
+  "runtime_rates_max_err_rad_s": 0.0,
+  "gate_seq_mismatch": [
+    0,
+    17600
+  ],
+  "gate_passes_recorded": [
+    29,
+    29,
+    32,
+    19
+  ],
+  "lap_wraps_recorded": 19,
+  "pass": true
+}

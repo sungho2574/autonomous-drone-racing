@@ -1,4 +1,4 @@
-"""Replay bundled v5 references through the installed runtime and selected map."""
+"""Replay bundled policy references through the installed runtime and selected map."""
 
 import argparse
 from pathlib import Path
@@ -17,7 +17,9 @@ def verify(policy, map_path):
     )
     mp = load_map_from_config(policy / "config_asrun.yaml", map_path)
     runner = PolicyRunner(policy / "policy.onnx", mp)
-    ref = np.load(policy / "rollout_ref.npz", allow_pickle=False)
+    # NPZ members are decompressed on every lookup; load once for long rollouts.
+    with np.load(policy / "rollout_ref.npz", allow_pickle=False) as archive:
+        ref = {key: archive[key] for key in archive.files}
     errors = dict(obs=0.0, action=0.0, thrust_n=0.0, rates_flu=0.0)
     bad_gate = 0
     count, drones = ref["obs"].shape[:2]
