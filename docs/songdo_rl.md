@@ -73,4 +73,4 @@ main은 경로의 gate_map_slow를 gate_map_main으로 바꾼다. 각각 17,600�
 - 설정: gate_pnp.yaml의 max_odom_gap / max_attitude_error_deg / min_quality, drift_corrector.yaml의 max_position_residual / min_quality.
 - association 판정 코드 10은 자세 불일치, 11은 낮은 품질. KF decision에는 low_quality / position_residual / innovation을 기록한다.
 - 현재 prior_topic 기본은 /adr/odom이다. 따라서 기본 자세 검사는 VIO만을 이용하는 구성이 아니며 해당 토픽의 기준 자세를 사용한다.
-- 절대 잔차 상한은 누적 오차가 1 m를 넘었을 때 재획득도 제한한다. 임계값은 초기 보수적 설정이며 실제 비행 검증이 필요하다.
+- 1 m 잔차/NIS 검사에 걸린 측정도 동일 게이트에서 3건 연속, 상호 보정량 차이 0.5 m 이내, 측정 간격 0.4초 이하, 전체 확인 시간 0.15초 이상이면 재획득한다. 보정량의 중앙값으로 drift 위치를 재설정하고 drift 속도는 0으로 초기화한다. decision에 reacquired를 남긴다. 재획득 순간 위치 변화는 발생하므로 measured 비행 전 GT 비행에서 검증해야 한다.

@@ -43,3 +43,32 @@ def test_hold_stops_extrapolation_and_rejection_does_not_refresh():
     assert f.last_update == 0
     np.testing.assert_allclose(f.at(10).p_d, [.5, 0, 0])
     np.testing.assert_allclose(f.at(20).p_d, [.5, 0, 0])
+
+
+def test_confirmed_recovery_and_velocity_reset():
+    timed = TimedDrift(DriftKF(), 2.5)
+    assert not timed.update(1., [0,0,3.1], [0,0,0], .5, 2)
+    assert not timed.update(1.1, [0,0,3.0], [0,0,0], .5, 2)
+    assert timed.update(1.2, [0,0,3.2], [0,0,0], .5, 2)
+    assert timed.last_recovered
+    np.testing.assert_allclose(timed.kf.p_d, [0,0,3.1])
+    np.testing.assert_allclose(timed.kf.v_d, [0,0,0])
+
+
+def test_recovery_requires_continuity_quality_and_same_gate():
+    for kind in ('gap', 'quality', 'gate', 'spread'):
+        timed = TimedDrift(DriftKF(), 2.5)
+        assert not timed.update(1., [0,0,3], [0,0,0], .5, 2)
+        assert not timed.update(1.1, [0,0,3], [0,0,0], .5, 2)
+        assert not timed.update(2. if kind == 'gap' else 1.2,
+                                [0,0,5 if kind == 'spread' else 3], [0,0,0],
+                                .01 if kind == 'quality' else .5,
+                                3 if kind == 'gate' else 2)
+        np.testing.assert_array_equal(timed.kf.x, np.zeros(6))
+
+
+def test_duplicate_timestamps_cannot_confirm_recovery():
+    timed = TimedDrift(DriftKF(), 2.5)
+    for _ in range(5):
+        assert not timed.update(1., [0,0,3], [0,0,0], .5, 2)
+    assert not timed.last_recovered

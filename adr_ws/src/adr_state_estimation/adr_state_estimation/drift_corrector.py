@@ -200,8 +200,8 @@ class DriftCorrector(Node):
                 self._n_rej_time += 1
                 continue
             z = np.array([m.pos_w.x, m.pos_w.y, m.pos_w.z])
-            accepted = self.timed.update(t, z, p_vio, m.quality)
-            self._decision(m, accepted, "accepted" if accepted else (self.kf.last_rejection or "time_order"))
+            accepted = self.timed.update(t, z, p_vio, m.quality, gate_id=int(m.gate_id))
+            self._decision(m, accepted, ("reacquired" if self.timed.last_recovered else "accepted") if accepted else (self.kf.last_rejection or "time_order"))
 
     def _decision(self, m, accepted, reason):
         self.decision_pub.publish(String(data=json.dumps(dict(
